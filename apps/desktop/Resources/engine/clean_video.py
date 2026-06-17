@@ -45,9 +45,10 @@ def _enable_group_cancel():
 
 from crisp import CleanError, clean_video
 from crisp.config import (
-    DEFAULT_AUDIO_BITRATE, DEFAULT_AUDIO_CODEC, DEFAULT_KEEP_PAUSE, DEFAULT_MAX_PAUSE,
-    DEFAULT_MODEL, DEFAULT_NOISE_DB, DEFAULT_QUALITY, DEFAULT_VIDEO_CODEC, MIN_KEEP,
+    DEFAULT_AUDIO_BITRATE, DEFAULT_AUDIO_CODEC, DEFAULT_CONTAINER, DEFAULT_KEEP_PAUSE,
+    DEFAULT_MAX_PAUSE, DEFAULT_MODEL, DEFAULT_NOISE_DB, DEFAULT_QUALITY, DEFAULT_VIDEO_CODEC, MIN_KEEP,
 )
+from crisp.encode import SUPPORTED_CONTAINERS
 
 
 def main():
@@ -62,8 +63,8 @@ def main():
                    help=f"breathing room left around each cut, in seconds (default {DEFAULT_KEEP_PAUSE})")
     p.add_argument("--min-keep", type=float, default=MIN_KEEP,
                    help=f"drop kept fragments shorter than this many seconds (default {MIN_KEEP})")
-    p.add_argument("--video-codec", choices=["h264", "hevc"], default=DEFAULT_VIDEO_CODEC,
-                   help=f"video encoder (default {DEFAULT_VIDEO_CODEC})")
+    p.add_argument("--video-codec", choices=["h264", "hevc", "vp9"], default=DEFAULT_VIDEO_CODEC,
+                   help=f"video encoder; vp9 is for WebM (default {DEFAULT_VIDEO_CODEC})")
     p.add_argument("--hardware", action="store_true",
                    help="use Apple VideoToolbox hardware encoding (faster)")
     p.add_argument("--quality", choices=["maximum", "high", "balanced", "smaller"],
@@ -72,12 +73,17 @@ def main():
                    help=f"audio encoder (default {DEFAULT_AUDIO_CODEC})")
     p.add_argument("--audio-bitrate", type=int, default=DEFAULT_AUDIO_BITRATE,
                    help=f"audio bitrate in kbps (default {DEFAULT_AUDIO_BITRATE})")
+    p.add_argument("--container", choices=["auto", *SUPPORTED_CONTAINERS],
+                   default=DEFAULT_CONTAINER,
+                   help=f"output container; 'auto' matches the input, 'webm' uses VP9+Opus "
+                        f"(default {DEFAULT_CONTAINER})")
     p.add_argument("--no-fillers", action="store_true", help="only remove pauses, keep um/uh")
     p.add_argument("--no-backup", action="store_true",
                    help="don't copy the original aside before cutting")
     p.add_argument("--backup-dir", default=None,
                    help="folder to copy the original into (default: an '_originals' folder beside it)")
-    p.add_argument("--out", default=None, help="output path (default: <name>_cleaned.mp4 beside input)")
+    p.add_argument("--out", default=None,
+                   help="output path (default: <name>_cleaned.<ext> beside input, ext per --container)")
     p.add_argument("--ndjson", action="store_true",
                    help="emit machine-readable progress as one JSON object per line "
                         "(used by the desktop app)")
@@ -99,7 +105,7 @@ def main():
                              noise=args.noise, keep_pause=args.keep_pause, min_keep=args.min_keep,
                              video_codec=args.video_codec, hardware=args.hardware, quality=args.quality,
                              audio_codec=args.audio_codec, audio_bitrate=args.audio_bitrate,
-                             remove_fillers=not args.no_fillers,
+                             container=args.container, remove_fillers=not args.no_fillers,
                              backup=not args.no_backup, backup_dir=args.backup_dir,
                              on_log=on_log, on_progress=on_progress)
         if args.ndjson:
