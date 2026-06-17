@@ -13,7 +13,7 @@ struct ContentView: View {
     private var modelBlocks: Bool { needsModel && !modelStore.state.isReady }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             header
             UpdateBanner(updater: updater)
             DropCard(model: model, importing: $importing)
@@ -28,11 +28,18 @@ struct ContentView: View {
             if !model.results.isEmpty && !model.isRunning {
                 ResultCard(model: model)
             }
-            Spacer(minLength: 0)
         }
         .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(width: 560, alignment: .leading)
         .background(.background)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                SettingsLink {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .help("Settings")
+            }
+        }
         .fileImporter(isPresented: $importing,
                       allowedContentTypes: [.movie, .video, .audiovisualContent],
                       allowsMultipleSelection: true) { result in
@@ -40,12 +47,13 @@ struct ContentView: View {
         }
     }
 
+    /// App identity — the real app icon (per-channel) + wordmark + tagline.
     private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "wand.and.stars")
-                .font(.system(size: 26, weight: .semibold))
-                .foregroundStyle(.tint)
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 14) {
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .frame(width: 46, height: 46)
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text("Crisp").font(.title.bold())
                     if let badge = Channel.current.badge {
@@ -59,30 +67,44 @@ struct ContentView: View {
                 Text("Remove pauses & filler words. Your original is always kept safe.")
                     .font(.callout).foregroundStyle(.secondary)
             }
+            Spacer(minLength: 0)
         }
     }
 
-    private var actionButton: some View {
-        Button {
-            let params = model.strength.parameters(using: settings.config)
-            Task { await model.start(modelPath: modelStore.readyModelPath, parameters: params) }
-        } label: {
-            HStack {
-                if model.isRunning {
-                    ProgressView().controlSize(.small)
-                    Text("Cleaning\u{2026}")
-                } else {
+    @ViewBuilder private var actionButton: some View {
+        if model.isRunning {
+            Button(role: .cancel) {
+                model.cancel()
+            } label: {
+                HStack {
+                    Image(systemName: "xmark.circle.fill")
+                    Text("Cancel")
+                }
+                .frame(maxWidth: .infinity)
+                .font(.headline)
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .tint(.red)
+            .keyboardShortcut(.cancelAction)
+        } else {
+            Button {
+                let params = model.strength.parameters(using: settings.config)
+                Task { await model.start(modelPath: modelStore.readyModelPath, parameters: params) }
+            } label: {
+                HStack {
                     Image(systemName: "scissors")
                     Text("Clean Video")
                 }
+                .frame(maxWidth: .infinity)
+                .font(.headline)
+                .padding(.vertical, 6)
             }
-            .frame(maxWidth: .infinity)
-            .font(.headline)
-            .padding(.vertical, 6)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(model.files.isEmpty || modelBlocks)
+            .keyboardShortcut(.return, modifiers: .command)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .disabled(model.files.isEmpty || model.isRunning || modelBlocks)
-        .keyboardShortcut(.return, modifiers: .command)
     }
 }
