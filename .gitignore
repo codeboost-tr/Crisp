@@ -1,0 +1,18 @@
+# Swift build output (matches at any depth, e.g. apps/desktop/.build)
+.build/
+build/
+.swiftpm/
+
+# Nightly/Dev app icons — generated locally on first build, not shipped.
+# (The stable AppIcon.icns IS committed so CI doesn't need to re-render it.)
+apps/desktop/Resources/AppIcon-Nightly.icns
+apps/desktop/Resources/AppIcon-Dev.icns
+
+# The whisper speech model (148 MB) — downloaded by setup.sh, never committed.
+apps/desktop/Resources/engine/models/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+.DS_Store
