@@ -7,6 +7,8 @@ struct ContentView: View {
     @Bindable var updater: Updater
     @Bindable var modelStore: ModelStore
     @Bindable var settings: EngineSettings
+    @Bindable var watchAgent: WatchAgentController
+    @Bindable var onboarding: OnboardingController
     @State private var importing = false
 
     /// Filler-word removal needs the speech model; pauses-only doesn't.
@@ -14,6 +16,17 @@ struct ContentView: View {
     private var modelBlocks: Bool { needsModel && !modelStore.state.isReady }
 
     var body: some View {
+        // The welcome flow owns the whole window on first launch — the main app
+        // stays hidden until onboarding is finished or skipped.
+        if onboarding.isPresented {
+            OnboardingView(onboarding: onboarding, modelStore: modelStore,
+                           settings: settings, watchAgent: watchAgent)
+        } else {
+            mainContent
+        }
+    }
+
+    private var mainContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
             UpdateBanner(updater: updater)
