@@ -23,6 +23,8 @@ final class EngineSettings {
     var audioBitrateKbps: Int { didSet { save() } }
     var outputContainer: String { didSet { save() } }
     var outputDirectory: String { didSet { save() } }   // "" ⇒ beside the source
+    var splitTracks: Bool { didSet { save() } }          // also write separate video/audio files
+    var splitAudioFormat: String { didSet { save() } }   // "match" | "wav"
     // Backup (applied to every clean)
     var backupOriginal: Bool { didSet { save() } }
     // Watch folder (drives the background agent)
@@ -53,6 +55,7 @@ final class EngineSettings {
                      videoQuality: videoQuality, audioCodec: audioCodec,
                      audioBitrateKbps: audioBitrateKbps, outputContainer: outputContainer,
                      outputDirectory: outputDirectory,
+                     splitTracks: splitTracks, splitAudioFormat: splitAudioFormat,
                      backupOriginal: backupOriginal,
                      watchEnabled: watchEnabled, watchFolderPath: watchFolderPath,
                      watchRemoveFillers: watchRemoveFillers,
@@ -80,6 +83,8 @@ final class EngineSettings {
         audioBitrateKbps = cfg.audioBitrateKbps
         outputContainer = cfg.outputContainer
         outputDirectory = cfg.outputDirectory
+        splitTracks = cfg.splitTracks
+        splitAudioFormat = cfg.splitAudioFormat
         backupOriginal = cfg.backupOriginal
         watchEnabled = cfg.watchEnabled
         watchFolderPath = cfg.watchFolderPath
@@ -108,6 +113,8 @@ final class EngineSettings {
         audioBitrateKbps = d.audioBitrateKbps
         outputContainer = d.outputContainer
         outputDirectory = d.outputDirectory
+        splitTracks = d.splitTracks
+        splitAudioFormat = d.splitAudioFormat
         backupOriginal = d.backupOriginal
     }
 
