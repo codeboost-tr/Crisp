@@ -5,11 +5,70 @@ itself lives in `edit`.
 """
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
 from .errors import CleanError
 from .tools import ffmpeg_bin
+
+# whisper.cpp's `--dtw` (token-level DTW timestamps) only accepts these built-in
+# alignment-head presets. We infer the right one from the model's filename so the
+# Swift side doesn't have to know about it. Anything not in this set (e.g. a
+# CrisperWhisper build) simply runs without DTW.
+DTW_ALIASES = frozenset({
+    "tiny", "tiny.en", "base", "base.en", "small", "small.en",
+    "medium", "medium.en", "large.v1", "large.v2", "large.v3", "large.v3.turbo",
+})
+
+
+def dtw_alias_for_model(model) -> str | None:
+    """Map a whisper.cpp model file to its `--dtw` preset, or None if unknown.
+
+    e.g. ``ggml-base.en.bin`` → ``base.en`` and
+    ``ggml-large-v3-turbo-q5_0.bin`` → ``large.v3.turbo``.
+    """
+    stem = Path(model).name
+    if stem.startswith("ggml-"):
+        stem = stem[len("ggml-"):]
+    if stem.endswith(".bin"):
+        stem = stem[:-len(".bin")]
+    stem = re.sub(r"-q\d+(_\d+)?$", "", stem)   # drop quantization suffix (-q5_0, -q8_0…)
+    alias = stem.replace("-", ".")
+    return alias if alias in DTW_ALIASES else None
+
+
+def parse_transcription(data: dict) -> list:
+    """Turn whisper.cpp `-oj`/`-ojf` JSON into word spans (seconds).
+
+    With `-ml 1 -sow` each transcription entry is ~one word. When DTW token
+    timestamps are present (`-ojf -dtw …`), the first token's ``t_dtw`` (in
+    centiseconds) gives a far more accurate word *onset* than whisper's heuristic
+    segment offset — so we trim the start to it. The end stays the segment's
+    offset (clamped so a span is never negative); breathing room and pause
+    merging downstream absorb any small tail. Falls back cleanly to plain segment
+    offsets when no DTW data is present.
+    """
+    words = []
+    for seg in data.get("transcription", []):
+        text = seg.get("text", "")
+        if not text.strip():
+            continue
+        offsets = seg.get("offsets", {})
+        try:
+            start = float(offsets["from"]) / 1000.0
+            end = float(offsets["to"]) / 1000.0
+        except (KeyError, TypeError, ValueError):
+            continue
+        for tok in seg.get("tokens", []):
+            t_dtw = tok.get("t_dtw", -1)
+            if isinstance(t_dtw, (int, float)) and t_dtw >= 0:
+                start = t_dtw / 100.0       # centiseconds → seconds
+                break
+        if end < start:
+            end = start
+        words.append({"text": text, "start": start, "end": end})
+    return words
 
 
 def extract_audio(src: Path, wav_path: Path, on_log) -> None:
@@ -49,12 +108,27 @@ def detect_silences(wav_path: Path, noise_db: float, min_pause: float, on_log) -
     return silences
 
 
+def whisper_command(whisper_bin, model, wav_path, out_prefix) -> list:
+    """Build the whisper.cpp argv. `-ml 1 -sow` gives one word per segment; when
+    the model has a known DTW preset we add `-dtw <alias> -ojf -nfa` for accurate
+    per-word onsets (DTW is disabled under flash attention, so it must be off).
+    Otherwise we keep the faster flash-attention path and plain `-oj` offsets.
+    """
+    cmd = [whisper_bin, "-m", str(model), "-f", str(wav_path),
+           "-ml", "1", "-sow", "-of", str(out_prefix), "-pp"]
+    alias = dtw_alias_for_model(model)
+    if alias:
+        cmd += ["-ojf", "-nfa", "-dtw", alias]
+    else:
+        cmd += ["-oj"]
+    return cmd
+
+
 def transcribe(whisper_bin, model, wav_path, out_prefix, on_log, on_progress):
     on_log("Transcribing (finding filler words)... this is the slow step.")
     json_path = Path(str(out_prefix) + ".json")
     proc = subprocess.Popen(
-        [whisper_bin, "-m", str(model), "-f", str(wav_path),
-         "-ml", "1", "-sow", "-oj", "-of", str(out_prefix), "-pp"],
+        whisper_command(whisper_bin, model, wav_path, out_prefix),
         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
     )
     for line in proc.stderr:
@@ -69,13 +143,4 @@ def transcribe(whisper_bin, model, wav_path, out_prefix, on_log, on_progress):
         raise CleanError("Transcription failed — the speech model may be missing.")
     with open(json_path) as f:
         data = json.load(f)
-    words = []
-    for seg in data.get("transcription", []):
-        o = seg.get("offsets", {})
-        try:
-            start, end = float(o["from"]) / 1000.0, float(o["to"]) / 1000.0
-        except (KeyError, TypeError, ValueError):
-            continue
-        if seg.get("text", "").strip():
-            words.append({"text": seg["text"], "start": start, "end": end})
-    return words
+    return parse_transcription(data)
