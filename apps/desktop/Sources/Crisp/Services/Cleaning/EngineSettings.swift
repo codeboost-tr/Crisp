@@ -97,7 +97,9 @@ final class EngineSettings {
         concurrencyMode = cfg.concurrencyMode
         manualConcurrency = cfg.manualConcurrency
         perJobMemoryBudgetMB = cfg.perJobMemoryBudgetMB
-        selectedModelID = cfg.selectedModelID
+        // Normalize a removed/unknown model id to the catalog fallback, so the
+        // Settings picker always has a valid selection (and the engine a real model).
+        selectedModelID = ModelCatalog.spec(id: cfg.selectedModelID).id
         if !existed { EngineConfigStore.save(config) }  // materialize the file on first launch
     }
 

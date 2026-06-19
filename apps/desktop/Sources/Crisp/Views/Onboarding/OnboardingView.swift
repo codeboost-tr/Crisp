@@ -315,7 +315,7 @@ struct OnboardingView: View {
     private func selectModel(_ spec: ModelSpec) {
         guard settings.selectedModelID != spec.id else { return }
         settings.selectedModelID = spec.id
-        Task { await modelStore.use(spec) }
+        modelStore.use(spec)   // synchronous: closes the gate immediately, then rechecks disk
     }
 
     /// "Skip" still routes through the mandatory model step until one is installed —

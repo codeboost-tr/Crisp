@@ -113,6 +113,15 @@ class ParseTranscriptionTests(unittest.TestCase):
         words = parse_transcription(data)
         self.assertGreaterEqual(words[0]["end"], words[0]["start"])
 
+    def test_leading_blank_token_does_not_set_onset(self):
+        # A leading blank/special token carrying a t_dtw must be skipped for the
+        # first real-text token's onset.
+        data = {"transcription": [
+            {"text": " hi", "offsets": {"from": 0, "to": 500},
+             "tokens": [{"text": "", "t_dtw": 5}, {"text": " hi", "t_dtw": 30}]}]}
+        words = parse_transcription(data)
+        self.assertAlmostEqual(words[0]["start"], 0.30)
+
     def test_empty_input(self):
         self.assertEqual(parse_transcription({}), [])
         self.assertEqual(parse_transcription({"transcription": []}), [])

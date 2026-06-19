@@ -62,7 +62,9 @@ def parse_transcription(data: dict) -> list:
             continue
         for tok in seg.get("tokens", []):
             t_dtw = tok.get("t_dtw", -1)
-            if isinstance(t_dtw, (int, float)) and t_dtw >= 0:
+            # Bind the onset to the first token that has real text and a computed
+            # DTW time — never a leading blank/special token.
+            if isinstance(t_dtw, (int, float)) and t_dtw >= 0 and tok.get("text", "").strip():
                 start = t_dtw / 100.0       # centiseconds → seconds
                 break
         if end < start:

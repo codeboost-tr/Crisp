@@ -10,6 +10,7 @@ struct SettingsView: View {
     @Bindable var updater: Updater
     @Bindable var watchAgent: WatchAgentController
     @Bindable var modelStore: ModelStore
+    @Bindable var model: CleanModel
 
     @State private var newPresetName = ""
     @State private var snapshot = SystemProbe.snapshot()
@@ -225,7 +226,7 @@ struct SettingsView: View {
         Binding(get: { settings.selectedModelID },
                 set: { id in
                     settings.selectedModelID = id
-                    Task { await modelStore.use(ModelCatalog.spec(id: id)) }
+                    modelStore.use(ModelCatalog.spec(id: id))
                 })
     }
 
@@ -234,7 +235,9 @@ struct SettingsView: View {
             Picker("Model", selection: activeModelBinding) {
                 ForEach(ModelCatalog.all) { Text($0.displayName).tag($0.id) }
             }
-            .disabled(modelStore.state.isBusy)   // don't switch mid-download
+            // Don't switch mid-download, or mid-clean (the running clean already
+            // locked in its model — switching would only mislead).
+            .disabled(modelStore.state.isBusy || model.isRunning)
             Text(modelStore.spec.summary)
                 .font(.caption).foregroundStyle(.secondary)
             modelStateRow
@@ -254,6 +257,7 @@ struct SettingsView: View {
                     Task { await modelStore.deleteSelected() }
                 }
                 .controlSize(.small)
+                .disabled(model.isRunning)   // never pull the model out from under a running clean
             }
         case .downloading(let fraction):
             HStack(spacing: 8) {
