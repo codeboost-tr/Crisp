@@ -11,6 +11,8 @@ struct SettingsView: View {
     @Bindable var updater: Updater
     @Bindable var watchAgent: WatchAgentController
     @Bindable var modelStore: ModelStore
+    @Bindable var fillerModelStore: ModelStore
+    @Bindable var fillerUpdater: FillerModelUpdater
     @Bindable var model: CleanModel
 
     @State private var newPresetName = ""
@@ -34,7 +36,7 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            tab { cuttingSection; speechModelSection }
+            tab { cuttingSection; speechModelSection; fillerModelSection }
                 .tabItem { Label("Cutting", systemImage: "scissors") }
 
             tab { encodingSection; captionsSection; outputLocationSection; originalsSection }
@@ -209,19 +211,86 @@ struct SettingsView: View {
 
     @ViewBuilder private var speechModelSection: some View {
         Section {
-            Picker("Model", selection: activeModelBinding) {
-                ForEach(ModelCatalog.all) { Text($0.displayName).tag($0.id) }
+            if settings.fillerModelEnabled {
+                // Mutually exclusive with the on-device filler model: when Wren is on,
+                // whisper isn't used for fillers, so its picker is hidden here.
+                Label(settings.captionsFormat == "none"
+                      ? "The on-device filler model (below) is handling filler detection — the speech model isn't used."
+                      : "The on-device filler model (below) handles fillers; the speech model is still used for captions.",
+                      systemImage: "bird")
+                    .font(.callout).foregroundStyle(.secondary)
+            } else {
+                Picker("Model", selection: activeModelBinding) {
+                    ForEach(ModelCatalog.all) { Text($0.displayName).tag($0.id) }
+                }
+                // Don't switch mid-download, or mid-clean (the running clean already
+                // locked in its model — switching would only mislead).
+                .disabled(modelStore.state.isBusy || model.isRunning)
+                Text(modelStore.spec.summary)
+                    .font(.caption).foregroundStyle(.secondary)
+                ModelInstallControl(store: modelStore, allowRemove: true, removeDisabled: model.isRunning)
             }
-            // Don't switch mid-download, or mid-clean (the running clean already
-            // locked in its model — switching would only mislead).
-            .disabled(modelStore.state.isBusy || model.isRunning)
-            Text(modelStore.spec.summary)
-                .font(.caption).foregroundStyle(.secondary)
-            ModelInstallControl(store: modelStore, allowRemove: true, removeDisabled: model.isRunning)
         } header: {
             Text("Speech model")
         } footer: {
-            Text("Used to find filler words. Larger models catch more fillers and place cuts more precisely, but download and run slower. Pauses are detected from the audio either way.")
+            Text("Used to find filler words (and to write captions). Larger models catch more fillers and place cuts more precisely, but download and run slower. Pauses are detected from the audio either way.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    /// Enabling the on-device filler model rechecks disk (so an already-installed
+    /// model shows ready immediately); switching models retargets its store.
+    private var fillerEnabledBinding: Binding<Bool> {
+        Binding(get: { settings.fillerModelEnabled },
+                set: { on in
+                    settings.fillerModelEnabled = on
+                    if on { Task { await fillerModelStore.refresh() } }
+                })
+    }
+    private var activeFillerModelBinding: Binding<String> {
+        Binding(get: { settings.selectedFillerModelID },
+                set: { id in
+                    settings.selectedFillerModelID = id
+                    fillerModelStore.use(FillerModelCatalog.spec(id: id))
+                })
+    }
+
+    @ViewBuilder private var fillerModelSection: some View {
+        Section {
+            Toggle("Use the fast on-device filler model", isOn: fillerEnabledBinding)
+                .disabled(model.isRunning)
+            if settings.fillerModelEnabled {
+                Label {
+                    Text("**English only.** Experimental — built for clear English speech. It can occasionally cut a real word, and it won't work on other languages. For non-English audio or captions, turn this off and use the speech model.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+                Picker("Model", selection: activeFillerModelBinding) {
+                    ForEach(FillerModelCatalog.all) { Text($0.displayName).tag($0.id) }
+                }
+                .disabled(fillerModelStore.state.isBusy || model.isRunning)
+                Text(fillerModelStore.spec.summary)
+                    .font(.caption).foregroundStyle(.secondary)
+                ModelInstallControl(store: fillerModelStore, allowRemove: true, removeDisabled: model.isRunning)
+                if case .available(let version) = fillerUpdater.state {
+                    HStack {
+                        Label("Model update available — v\(version)", systemImage: "arrow.down.circle.fill")
+                            .foregroundStyle(.tint)
+                        Spacer()
+                        Button("Update") { Task { await fillerUpdater.apply(using: fillerModelStore) } }
+                            .disabled(fillerModelStore.state.isBusy || model.isRunning)
+                    }
+                }
+                Toggle("Share anonymous data to help improve the model", isOn: $settings.shareFillerData)
+                Text("On-device only. Records counts + durations (never your audio, filenames, or any content) to ~/.crisp/feedback. Nothing is uploaded.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Filler detection (experimental)")
+        } footer: {
+            Text("A tiny on-device model that spots um/uh much faster than transcribing — used instead of the speech model above when removing fillers. English only; off by default. Captions still use the speech model.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
