@@ -15,6 +15,10 @@ final class EngineSettings {
     var silenceFloorDB: Double { didSet { save() } }
     var breathingRoom: Double { didSet { save() } }
     var minKeep: Double { didSet { save() } }
+    // Cut smoothing (applied to every clean) — soften the splice so cuts don't click
+    var fadeMs: Double { didSet { save() } }
+    var crossfadeMs: Double { didSet { save() } }
+    var snapMs: Double { didSet { save() } }
     // Encoding (applied to every clean)
     var videoCodec: String { didSet { save() } }
     var hardwareEncoding: Bool { didSet { save() } }
@@ -62,6 +66,7 @@ final class EngineSettings {
         EngineConfig(version: EngineConfig.defaults.version,
                      pauseThreshold: pauseThreshold, silenceFloorDB: silenceFloorDB,
                      breathingRoom: breathingRoom, minKeep: minKeep,
+                     fadeMs: fadeMs, crossfadeMs: crossfadeMs, snapMs: snapMs,
                      videoCodec: videoCodec, hardwareEncoding: hardwareEncoding,
                      videoQuality: videoQuality, audioCodec: audioCodec,
                      audioBitrateKbps: audioBitrateKbps, outputContainer: outputContainer,
@@ -92,6 +97,11 @@ final class EngineSettings {
         silenceFloorDB = cfg.silenceFloorDB
         breathingRoom = cfg.breathingRoom
         minKeep = cfg.minKeep
+        // Clamp persisted smoothing values to the Settings slider bounds, so a stale
+        // or hand-edited config can't drive the engine past the UI limits.
+        fadeMs = min(max(cfg.fadeMs, 0), 50)
+        crossfadeMs = min(max(cfg.crossfadeMs, 0), 500)
+        snapMs = min(max(cfg.snapMs, 0), 30)
         videoCodec = cfg.videoCodec
         hardwareEncoding = cfg.hardwareEncoding
         videoQuality = cfg.videoQuality
@@ -135,6 +145,9 @@ final class EngineSettings {
         silenceFloorDB = d.silenceFloorDB
         breathingRoom = d.breathingRoom
         minKeep = d.minKeep
+        fadeMs = d.fadeMs
+        crossfadeMs = d.crossfadeMs
+        snapMs = d.snapMs
         videoCodec = d.videoCodec
         hardwareEncoding = d.hardwareEncoding
         videoQuality = d.videoQuality

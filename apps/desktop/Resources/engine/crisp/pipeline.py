@@ -4,13 +4,13 @@ import tempfile
 from pathlib import Path
 
 from .config import (
-    DEFAULT_AUDIO_BITRATE, DEFAULT_AUDIO_CODEC, DEFAULT_BACKUP, DEFAULT_CONTAINER, DEFAULT_HARDWARE,
-    DEFAULT_KEEP_PAUSE, DEFAULT_MAX_PAUSE, DEFAULT_MODEL, DEFAULT_NOISE_DB, DEFAULT_QUALITY,
-    DEFAULT_VIDEO_CODEC, MIN_KEEP,
+    DEFAULT_AUDIO_BITRATE, DEFAULT_AUDIO_CODEC, DEFAULT_BACKUP, DEFAULT_CONTAINER, DEFAULT_CROSSFADE_MS,
+    DEFAULT_FADE_MS, DEFAULT_HARDWARE, DEFAULT_KEEP_PAUSE, DEFAULT_MAX_PAUSE, DEFAULT_MODEL,
+    DEFAULT_NOISE_DB, DEFAULT_QUALITY, DEFAULT_SNAP_MS, DEFAULT_VIDEO_CODEC, MIN_KEEP,
 )
 from .detect import detect_silences, extract_audio, filler_words, transcribe
-from .edit import (build_keep_segments, gate_fillers_by_silence, make_backup, render,
-                   tag_output_source, unique_output_path)
+from .edit import (build_keep_segments, gate_fillers_by_silence, make_backup, output_duration,
+                   render, snap_keep_to_zero_crossings, tag_output_source, unique_output_path)
 from .encode import (
     audio_args, container_args, default_output_path, resolve_codecs, resolve_container, video_args,
 )
@@ -64,6 +64,7 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
                 backup_dir=None, out_dir=None, split_tracks=False, split_audio="match",
                 waveform_buckets=0, keep_file=None, captions="none",
                 filler_backend="whisper", filler_model=None,
+                fade_ms=DEFAULT_FADE_MS, crossfade_ms=DEFAULT_CROSSFADE_MS, snap_ms=DEFAULT_SNAP_MS,
                 on_log=None, on_progress=None, logger=None):
     """
     Clean one video. Returns a dict with results.
@@ -200,6 +201,11 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
                 raise CleanError("Everything looked like silence — nothing to keep. "
                                  "Try a larger pause value.")
 
+            # Phase 3: nudge cut boundaries onto zero-crossings while the analysis WAV
+            # still exists, so the splices land where the waveform is already ~0.
+            if snap_ms > 0:
+                keep = snap_keep_to_zero_crossings(keep, wav, snap_ms / 1000.0, logger=logger)
+
             # Build the UI waveform now, while the analysis WAV still exists (it's
             # deleted when this temp dir closes). Opt-in via waveform_buckets so the
             # bare CLI / watcher don't pay for data nothing renders.
@@ -207,7 +213,9 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
                 from .waveform import waveform_summary
                 wave_summary = waveform_summary(wav, duration, keep, waveform_buckets)
 
-    kept_dur = sum(e - s for s, e in keep)
+    # Effective output length: a crossfade overlaps each join, so the reported
+    # new/saved seconds match the file render() actually writes (not the raw sum).
+    kept_dur = output_duration(keep, crossfade_ms / 1000.0)
     logger.info(f"keep {len(keep)} segments, kept {kept_dur:.2f}s, "
                 f"fillers={stats['fillers']} pauses={stats['pauses']}")
     on_log(f"Removing {stats['fillers']} filler words and {stats['pauses']} pauses.")
@@ -215,9 +223,11 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
 
     audio = audio_args(audio_codec, audio_bitrate)
     mux = container_args(container)
+    fade_s, crossfade_s = fade_ms / 1000.0, crossfade_ms / 1000.0
     try:
         render(src, keep, out_path, on_log, stage(0.60, 1.0),
-               video_args(video_codec, hardware, quality), audio, mux, logger=logger)
+               video_args(video_codec, hardware, quality), audio, mux,
+               fade=fade_s, crossfade=crossfade_s, logger=logger)
     except CleanError:
         if not hardware:
             raise
@@ -226,7 +236,8 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
         logger.notice("Hardware encoding failed — retrying in software")
         on_log("Hardware encoding failed — falling back to software encoding…")
         render(src, keep, out_path, on_log, stage(0.60, 1.0),
-               video_args(video_codec, False, quality), audio, mux, logger=logger)
+               video_args(video_codec, False, quality), audio, mux,
+               fade=fade_s, crossfade=crossfade_s, logger=logger)
 
     if out_dir:
         # Tag the output so a later re-clean of this same source overwrites it,
