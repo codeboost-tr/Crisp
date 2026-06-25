@@ -207,6 +207,38 @@ Then retrain **with the Tier-A flags on** (they're free) and re-measure on real 
 
 ---
 
+## 6g. Raven Phase 2 — language does NOT carry removability (on the labels we have)
+
+Built `raven/` (Phase 1 dataset = per-filler neighbouring words + gaps + derived
+removable label; Phase 2 head = words+numeric → removable). Ran the honest ablation
+to settle Raven's core premise:
+
+| model input | val F1 | reads as |
+|---|---|---|
+| **gaps-only** | **0.999** | just memorizes the timing rule (the label *is* the rule) |
+| **words-only** | **0.409** | barely above the 38% base rate — **language carries ~no signal** |
+| both | 0.990 | gaps dominate; words add nothing |
+
+**Decisive negative result.** Removability, *as we can label it*, is a **timing fact**
+(is there a pause around the filler) — and the surrounding **words don't predict
+timing**. So Raven's "judge from the language" premise **cannot be learned on the
+derived label.** This matches the relabel wash (§6c), now proven at the model level.
+
+**Why, and the real unlock.** There is no human "should-cut" label anywhere — only
+the gap rule, which the engine *already* applies via `silencedetect`. For language to
+matter, the label has to be a real *editorial* decision ("a human chose to cut this"),
+which only the **review-timeline feedback loop** (idea.md #9) produces. **That loop is
+Raven's prerequisite, not a nice-to-have.** Until it exists, Raven has nothing to
+learn that the existing silence logic doesn't already do.
+
+**Status: Raven paused — blocked on gold labels.** Don't export/ship a head that's
+either the timing rule re-wrapped (gaps-only) or noise (words-only). Build the
+feedback loop first; revisit Raven once real keep/remove labels accumulate. The
+shipped Wren (v0.0.10) remains the right model for the user's real footage
+(talking-head, no music: 0.8% cut, sparse filler-length).
+
+---
+
 ## 7. Quick reference
 
 - Branches: `feature/wren-backend` → PR #48 (merged into `nightly`); `feature/ml-dev-flow` = the model dev flow (channels + sideload + history).
