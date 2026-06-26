@@ -17,6 +17,13 @@ struct BottomBar: View {
 
     private var pending: Int { model.waitingCount }
     private var doneCount: Int { model.doneCount }
+    /// Repeated-take removal needs the speech model to transcribe, which the fast
+    /// on-device filler model can't — so the toggle is unavailable only when that model
+    /// is the *active* backend (filler removal on and the model enabled). With fillers
+    /// off, whisper runs and retakes are available again. Matches `CleanModel.start`.
+    private var retakesUnavailable: Bool {
+        model.removeFillers && settings.fillerModelEnabled
+    }
 
     var body: some View {
         HStack(spacing: 14) {
@@ -43,7 +50,7 @@ struct BottomBar: View {
         } else if pending > 0 {
             // There's something to clean → show the default recipe + a hint line.
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 14) {
+                HStack(spacing: 16) {
                     HStack(spacing: 6) {
                         Text("Cut").font(.callout).foregroundStyle(.secondary).fixedSize()
                         Picker("Cut", selection: $model.strength) {
@@ -51,10 +58,28 @@ struct BottomBar: View {
                         }
                         .labelsHidden().pickerStyle(.menu).fixedSize()
                     }
-                    Toggle("Remove fillers", isOn: $model.removeFillers)
-                        .toggleStyle(.checkbox)
+                    // One "Remove" label shared by both toggles — compact, and avoids
+                    // repeating the verb (keeps the bar on one line in a narrow window).
+                    HStack(spacing: 10) {
+                        Text("Remove").font(.callout).foregroundStyle(.secondary).fixedSize()
+                        Toggle("Fillers", isOn: $model.removeFillers)
+                            .toggleStyle(.checkbox)
+                        // Retake removal needs the speech model to transcribe, which the
+                        // fast on-device filler model can't do — so it's unavailable while
+                        // that model is on (mirrors how captions are disabled), shown off
+                        // and greyed rather than silently falling back to whisper.
+                        Toggle("Repeated takes", isOn: Binding(
+                            get: { model.removeRetakes && !retakesUnavailable },
+                            set: { model.removeRetakes = $0 }))
+                            .toggleStyle(.checkbox)
+                            .disabled(retakesUnavailable)
+                            .help(retakesUnavailable
+                                  ? "Unavailable with the fast on-device filler model — finding repeated takes needs the speech model to transcribe. Turn the fast model off in Settings to use this."
+                                  : "Remove a phrase you flubbed and immediately said again, keeping the corrected take.")
+                    }
                 }
                 .fixedSize()        // keep the whole recipe row on one line
+                if retakesUnavailable { retakeUnavailableNote }
                 estimateRow
             }
         } else {
@@ -78,6 +103,18 @@ struct BottomBar: View {
             Text("Crisp only writes a cleaned copy \u{2014} your originals are untouched.")
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
         }
+    }
+
+    /// Visible reason the "Repeated takes" toggle is greyed out (a tooltip alone
+    /// isn't discoverable) — plus a direct link to Settings to switch models.
+    @ViewBuilder private var retakeUnavailableNote: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "info.circle").imageScale(.small)
+            Text("\u{201C}Repeated takes\u{201D} needs the speech model.")
+            SettingsLink { Text("Open Settings") }
+                .buttonStyle(.link)
+        }
+        .font(.caption).foregroundStyle(.secondary).fixedSize()
     }
 
     /// Pre-flight estimate: a button to predict the time saved before cleaning, or
@@ -112,8 +149,9 @@ struct BottomBar: View {
     private var summaryText: String {
         let fillers = model.results.reduce(0) { $0 + $1.fillers }
         let pauses = model.results.reduce(0) { $0 + $1.pauses }
+        let retakes = model.results.reduce(0) { $0 + $1.retakes }
         var line = "Cleaned \(doneCount) \u{00B7} saved \(formatTime(totalSaved))"
-        if let cuts = CleanResult.cutsSummary(fillers: fillers, pauses: pauses) {
+        if let cuts = CleanResult.cutsSummary(fillers: fillers, pauses: pauses, retakes: retakes) {
             line += " \u{00B7} \(cuts)"
         }
         return line
@@ -126,7 +164,7 @@ struct BottomBar: View {
             Button(role: .cancel) { model.cancel() } label: {
                 Label("Cancel", systemImage: "xmark.circle.fill")
             }
-            .controlSize(.large).tint(.red)
+            .controlSize(.large).tint(.red).fixedSize()
             .keyboardShortcut(.cancelAction)
         } else if pending > 0 {
             Button(action: onStart) {
@@ -134,18 +172,19 @@ struct BottomBar: View {
                     .padding(.horizontal, 6)
             }
             .buttonStyle(.borderedProminent).controlSize(.large)
+            .fixedSize()        // always show the full label — never clip to "Cle…"
             .disabled(modelBlocks)
             .keyboardShortcut(.return, modifiers: .command)
         } else if !model.results.isEmpty {
             Button { model.reset() } label: { Text("Clear") }
-                .controlSize(.large)
+                .controlSize(.large).fixedSize()
             Button {
                 // Reveal every cleaned file, not just one — they may span folders.
                 let urls = model.results.filter { !$0.output.isEmpty }
                     .map { URL(fileURLWithPath: $0.output) }
                 if !urls.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(urls) }
             } label: { Label("Show in Finder", systemImage: "folder") }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.borderedProminent).controlSize(.large).fixedSize()
         }
     }
 }

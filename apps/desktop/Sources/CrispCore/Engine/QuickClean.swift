@@ -17,17 +17,37 @@ public struct QuickClean {
     public func clean(_ input: URL,
                       strength: Strength,
                       removeFillers: Bool,
+                      removeRetakes: Bool = true,
+                      allowDownload: Bool = true,
                       provisioner: ModelProvisioner = .forSelectedModel(),
                       onEvent: (@Sendable (CleanRunner.Progress) -> Void)? = nil) async throws -> CleanResult {
-        let config = EngineConfigStore.load()
-        // Captions are transcribed from speech, so they need the model too — bring it
-        // online whenever the run will transcribe, not only for filler removal.
-        let needsTranscript = removeFillers || config.captionsFormat != "none"
-        let modelPath: String? = needsTranscript ? try await provisioner.ensureModel() : nil
+        var config = EngineConfigStore.load()
+        // Anything that reads the transcript needs the speech model online first: filler
+        // removal, caption export, *and* retake detection (which matches the words).
+        let needsTranscript = removeFillers || removeRetakes || config.captionsFormat != "none"
+        // `allowDownload == false` (the Finder Quick Action) must never kick off a
+        // background fetch — use only an already-verified model, falling back to nil.
+        let modelPath: String?
+        if needsTranscript {
+            modelPath = allowDownload ? try await provisioner.ensureModel()
+                                      : await provisioner.existingVerifiedPath()
+        } else {
+            modelPath = nil
+        }
+        // No usable model (and no download): drop every transcript-dependent step rather
+        // than fail — pauses are still cut. Captions especially must be cleared, since
+        // they'd otherwise reach the engine without a model and error.
+        var removeFillers = removeFillers, removeRetakes = removeRetakes
+        if needsTranscript && modelPath == nil {
+            removeFillers = false
+            removeRetakes = false
+            config.captionsFormat = "none"
+        }
         let params = strength.parameters(using: config)
         let backupDir = params.backupOriginal ? CleanRunner.backupDirectory() : nil
         let options = CleanRunner.Options(modelPath: modelPath,
                                           removeFillers: removeFillers,
+                                          removeRetakes: removeRetakes,
                                           backupDirectory: backupDir)
         return try await CleanRunner().run(input: input, parameters: params,
                                            options: options, onEvent: onEvent ?? { _ in })
