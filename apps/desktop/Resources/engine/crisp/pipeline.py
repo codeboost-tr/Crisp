@@ -6,10 +6,10 @@ from pathlib import Path
 from .config import (
     DEFAULT_AUDIO_BITRATE, DEFAULT_AUDIO_CODEC, DEFAULT_BACKUP, DEFAULT_CONTAINER, DEFAULT_CROSSFADE_MS,
     DEFAULT_FADE_MS, DEFAULT_HARDWARE, DEFAULT_KEEP_PAUSE, DEFAULT_MAX_PAUSE, DEFAULT_MODEL,
-    DEFAULT_NOISE_DB, DEFAULT_QUALITY, DEFAULT_REMOVE_RETAKES, DEFAULT_SNAP_MS, DEFAULT_VIDEO_CODEC,
-    MIN_KEEP,
+    DEFAULT_NOISE_DB, DEFAULT_QUALITY, DEFAULT_REMOVE_RETAKES, DEFAULT_RETAKE_SENSITIVITY, DEFAULT_SNAP_MS,
+    DEFAULT_VIDEO_CODEC, MIN_KEEP, RETAKE_ANCHOR_PAUSE, RETAKE_MIN_RUN, RETAKE_SENSITIVITY_MIN_RUN,
 )
-from .detect import detect_silences, extract_audio, filler_words, transcribe
+from .detect import detect_silences, extract_audio, filler_words, filter_silences, transcribe
 from .edit import (build_keep_segments, gate_fillers_by_silence, make_backup, output_duration,
                    render, snap_keep_to_zero_crossings, tag_output_source, unique_output_path)
 from .encode import (
@@ -67,6 +67,7 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
                 waveform_buckets=0, keep_file=None, captions="none",
                 filler_backend="whisper", filler_model=None,
                 fade_ms=DEFAULT_FADE_MS, crossfade_ms=DEFAULT_CROSSFADE_MS, snap_ms=DEFAULT_SNAP_MS,
+                retake_sensitivity=DEFAULT_RETAKE_SENSITIVITY,
                 on_log=None, on_progress=None, logger=None):
     """
     Clean one video. Returns a dict with results.
@@ -120,6 +121,7 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
     logger.info(f"out={out_path} container={container} video={video_codec} "
                 f"audio={audio_codec} hw={hardware} quality={quality} "
                 f"remove_fillers={remove_fillers} remove_retakes={remove_retakes} "
+                f"retake_sensitivity={retake_sensitivity} "
                 f"captions={captions} keep_file={bool(keep_file)} backup={backup}")
 
     # Captions also need the transcript (and the speech model), so we transcribe
@@ -192,7 +194,24 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
             extract_audio(src, wav, on_log, logger=logger)
 
             on_progress(0.10, "Detecting pauses…")
-            silences = detect_silences(wav, noise, pause, on_log, logger=logger)
+            # One silencedetect pass. Retake anchoring needs a shorter pause than the
+            # cut threshold (a redo pause is brief), so when retakes are on we scan at
+            # the lower of the two and derive the cut set by filtering on duration:
+            # silencedetect's `d=` only gates which silences are *reported*, not their
+            # boundaries, so the filtered set is identical to a direct scan at `pause`
+            # (verified on real audio). Avoids a second full ffmpeg pass on long videos.
+            anchor_silences = []
+            if do_retakes:
+                # One scan at the shorter threshold serves both sets (see filter_silences).
+                found = detect_silences(wav, noise, min(pause, RETAKE_ANCHOR_PAUSE),
+                                        on_log, logger=logger)
+                silences = filter_silences(found, pause)
+                anchor_silences = filter_silences(found, RETAKE_ANCHOR_PAUSE)
+                logger.debug(f"from {len(found)} pauses: {len(silences)} cut "
+                             f"(≥{pause}s) + {len(anchor_silences)} retake-anchor "
+                             f"(≥{RETAKE_ANCHOR_PAUSE}s)")
+            else:
+                silences = detect_silences(wav, noise, pause, on_log, logger=logger)
 
             if need_transcript:
                 if use_classifier:
@@ -209,7 +228,6 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
                     words = transcribe(whisper_bin, model, wav, tmp / "transcript",
                                        on_log, stage(0.15, 0.58), logger=logger)
                 on_log(f"Found {len(words)} spoken words.")
-            on_progress(0.58, "Planning cuts…")
 
             # Only cut filler words when the user asked to; if we transcribed purely
             # for captions, every word stays in the cut plan (fillers are still
@@ -220,9 +238,20 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
             # whisper supplied `words`.
             retakes = []
             if do_retakes and words:
+                # Its own visible step (after "Detecting pauses" / "Transcribing"), so
+                # the UI shows that repeated-take detection is happening. Held at the
+                # transcription ceiling (0.58) so the bar never moves backward.
+                on_log("Finding repeated takes...")
+                on_progress(0.58, "Finding repeated takes…")
                 from .retake import detect_retakes
-                retakes = detect_retakes(words)
-                logger.debug(f"retake detection found {len(retakes)} repeated take(s)")
+                # `anchor_silences` (the short-threshold pauses computed above) keep
+                # detection from firing on natural mid-sentence repetition; sensitivity
+                # sets how many matched words count as a redo.
+                min_run = RETAKE_SENSITIVITY_MIN_RUN.get(retake_sensitivity, RETAKE_MIN_RUN)
+                retakes = detect_retakes(words, min_run=min_run, silences=anchor_silences)
+                logger.debug(f"retake detection ({retake_sensitivity}, min_run={min_run}) "
+                             f"found {len(retakes)} repeated take(s)")
+            on_progress(0.59, "Planning cuts…")
             keep, stats = build_keep_segments(cut_words, silences, duration, keep_pause,
                                               min_keep, retakes=retakes)
             if not keep:
