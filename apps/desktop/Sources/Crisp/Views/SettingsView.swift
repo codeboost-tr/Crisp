@@ -40,7 +40,7 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            tab { cuttingSection; smoothingSection; speechModelSection; fillerModelSection }
+            tab { cuttingSection; retakeSection; smoothingSection; speechModelSection; fillerModelSection }
                 .tabItem { Label("Cutting", systemImage: "scissors") }
 
             tab { encodingSection; captionsSection; outputLocationSection; originalsSection }
@@ -92,6 +92,35 @@ struct SettingsView: View {
             Text("Custom cutting")
         } footer: {
             Text("Applied when \u{201C}How much to cut\u{201D} is set to Custom.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private var retakeSection: some View {
+        Section {
+            Picker("Sensitivity", selection: $settings.retakeSensitivity) {
+                ForEach(RetakeSensitivity.allCases) { Text($0.label).tag($0.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            // Retake detection reads the transcript, which the fast on-device filler
+            // model can't produce — so it's unavailable while that model is on, the
+            // same way captions are. Disable the control and say so clearly.
+            .disabled(settings.fillerModelEnabled)
+            if settings.fillerModelEnabled {
+                Label {
+                    Text("**Not available with our custom fast model.** Finding repeated takes needs the speech model to read your words \u{2014} the fast filler model can't transcribe. Turn it off (below) to use the more powerful speech model.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                }
+            } else {
+                Text(RetakeSensitivity(rawValue: settings.retakeSensitivity)?.detail ?? "")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Repeated takes")
+        } footer: {
+            Text("When you flub a line and immediately say it again, Crisp keeps the corrected take and cuts the first. Turn it on/off per clean with \u{201C}Remove repeated takes.\u{201D} Needs the speech model.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -305,7 +334,7 @@ struct SettingsView: View {
                 .disabled(model.isRunning)
             if settings.fillerModelEnabled {
                 Label {
-                    Text("**English only.** Experimental — built for clear English speech. It can occasionally cut a real word, and it won't work on other languages. For non-English audio or captions, turn this off and use the speech model.")
+                    Text("**English only.** Experimental — built for clear English speech. It can occasionally cut a real word, and it won't work on other languages. For non-English audio, captions, or removing repeated takes, turn this off and use the speech model.")
                         .font(.caption).foregroundStyle(.secondary)
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -335,7 +364,7 @@ struct SettingsView: View {
         } header: {
             Text("Filler detection (experimental)")
         } footer: {
-            Text("A tiny on-device model that spots um/uh much faster than transcribing — used instead of the speech model above when removing fillers. English only; off by default. Captions still use the speech model.")
+            Text("A tiny on-device model that spots um/uh much faster than transcribing — used instead of the speech model above when removing fillers. English only; off by default. Captions and repeated-take removal still need the speech model.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         // Dev build: load the published version history so the picker can offer old models.

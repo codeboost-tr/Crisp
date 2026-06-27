@@ -418,15 +418,73 @@ final class CrispTests: XCTestCase {
 
     func testCleanRunnerArgumentsForPausesOnlyNoBackup() {
         let params = Strength.gentle.parameters(using: .defaults)
-        let opts = CleanRunner.Options(modelPath: nil, removeFillers: false, backupDirectory: nil)
+        // Pauses only: both detection passes off, so neither needs the transcript.
+        let opts = CleanRunner.Options(modelPath: nil, removeFillers: false,
+                                       removeRetakes: false, backupDirectory: nil)
         let args = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
                                          input: URL(fileURLWithPath: "/v/in.mov"),
                                          parameters: params, options: opts)
         XCTAssertTrue(args.contains("--no-fillers"))               // fillers off
+        XCTAssertTrue(args.contains("--no-retakes"))               // retakes off
         XCTAssertFalse(args.contains("--model"))                   // ⇒ no model flag
         XCTAssertTrue(args.contains("--no-backup"))                // no backup dir
         XCTAssertFalse(args.contains("--backup-dir"))
         XCTAssertFalse(args.contains("--out-dir"))                 // default ⇒ beside source
+    }
+
+    func testRetakeRemovalFlagMapping() {
+        let params = Strength.aggressive.parameters(using: .defaults)
+        // Retakes on (default) with fillers off: no --no-retakes, and the transcript
+        // model is still required (retake detection matches the whisper transcript).
+        let on = CleanRunner.Options(modelPath: "/models/ggml.bin", removeFillers: false)
+        let onArgs = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                           input: URL(fileURLWithPath: "/v/in.mp4"),
+                                           parameters: params, options: on)
+        XCTAssertFalse(onArgs.contains("--no-retakes"))
+        XCTAssertEqual(valueAfter("--model", in: onArgs), "/models/ggml.bin")
+        // …and the sensitivity (from config, default aggressive) is forwarded.
+        XCTAssertEqual(valueAfter("--retake-sensitivity", in: onArgs), "aggressive")
+
+        // Retakes off: --no-retakes is passed and no sensitivity flag.
+        let off = CleanRunner.Options(modelPath: "/models/ggml.bin", removeFillers: true,
+                                      removeRetakes: false)
+        let offArgs = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                            input: URL(fileURLWithPath: "/v/in.mp4"),
+                                            parameters: params, options: off)
+        XCTAssertTrue(offArgs.contains("--no-retakes"))
+        XCTAssertFalse(offArgs.contains("--retake-sensitivity"))
+    }
+
+    func testRetakeSensitivityCarriesThrough() {
+        var cfg = EngineConfig.defaults
+        cfg.retakeSensitivity = "aggressive"
+        let params = Strength.aggressive.parameters(using: cfg)
+        let opts = CleanRunner.Options(modelPath: "/models/ggml.bin", removeFillers: true)
+        let args = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                         input: URL(fileURLWithPath: "/v/in.mp4"),
+                                         parameters: params, options: opts)
+        XCTAssertEqual(valueAfter("--retake-sensitivity", in: args), "aggressive")
+    }
+
+    func testRetakeSensitivityForwardCompatDefaultsToAggressive() throws {
+        // A config predating the key decodes with the default (now aggressive).
+        let legacy = Data(#"{ "version": 3, "pauseThreshold": 0.4 }"#.utf8)
+        let cfg = try JSONDecoder().decode(EngineConfig.self, from: legacy)
+        XCTAssertEqual(cfg.retakeSensitivity, "aggressive")
+    }
+
+    func testCorruptRetakeSensitivityIsClampedNotForwarded() {
+        // A hand-edited/garbage value must not reach the engine's fixed --choices and
+        // hard-fail the clean; it's clamped to the default preset when building parameters.
+        var cfg = EngineConfig.defaults
+        cfg.retakeSensitivity = "ludicrous"
+        let params = Strength.aggressive.parameters(using: cfg)
+        XCTAssertEqual(params.retakeSensitivity, "aggressive")
+        let args = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                         input: URL(fileURLWithPath: "/v/in.mp4"),
+                                         parameters: params,
+                                         options: CleanRunner.Options(modelPath: "/m.bin", removeFillers: true))
+        XCTAssertEqual(valueAfter("--retake-sensitivity", in: args), "aggressive")
     }
 
     func testSplitFlagOnlyWhenEnabled() {

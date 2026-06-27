@@ -48,7 +48,8 @@ from crisp import CleanError, clean_video
 from crisp.config import (
     DEFAULT_AUDIO_BITRATE, DEFAULT_AUDIO_CODEC, DEFAULT_CONTAINER, DEFAULT_CROSSFADE_MS,
     DEFAULT_FADE_MS, DEFAULT_FILLER_BACKEND, DEFAULT_KEEP_PAUSE, DEFAULT_MAX_PAUSE, DEFAULT_MODEL,
-    DEFAULT_NOISE_DB, DEFAULT_QUALITY, DEFAULT_SNAP_MS, DEFAULT_VIDEO_CODEC, MIN_KEEP,
+    DEFAULT_NOISE_DB, DEFAULT_QUALITY, DEFAULT_RETAKE_SENSITIVITY, DEFAULT_SNAP_MS, DEFAULT_VIDEO_CODEC,
+    MIN_KEEP, RETAKE_SENSITIVITY_MIN_RUN,
 )
 from crisp.encode import SUPPORTED_CONTAINERS
 from crisp.enginelog import logger_from_env
@@ -90,6 +91,14 @@ def main():
                    help=f"output container; 'auto' matches the input, 'webm' uses VP9+Opus "
                         f"(default {DEFAULT_CONTAINER})")
     p.add_argument("--no-fillers", action="store_true", help="only remove pauses, keep um/uh")
+    p.add_argument("--no-retakes", action="store_true",
+                   help="don't remove repeated takes (a flubbed phrase you immediately "
+                        "said again); on by default, needs a whisper transcript")
+    p.add_argument("--retake-sensitivity", choices=list(RETAKE_SENSITIVITY_MIN_RUN),
+                   default=DEFAULT_RETAKE_SENSITIVITY,
+                   help=f"how eagerly to cut repeated takes: gentle (only long redos "
+                        f"after a pause) … aggressive (also mid-sentence restarts with "
+                        f"no pause) (default {DEFAULT_RETAKE_SENSITIVITY})")
     p.add_argument("--no-backup", action="store_true",
                    help="don't copy the original aside before cutting")
     p.add_argument("--split", action="store_true",
@@ -199,6 +208,8 @@ def main():
                              video_codec=args.video_codec, hardware=args.hardware, quality=args.quality,
                              audio_codec=args.audio_codec, audio_bitrate=args.audio_bitrate,
                              container=args.container, remove_fillers=not args.no_fillers,
+                             remove_retakes=not args.no_retakes,
+                             retake_sensitivity=args.retake_sensitivity,
                              backup=not args.no_backup, backup_dir=args.backup_dir,
                              out_dir=args.out_dir, split_tracks=args.split,
                              split_audio=args.split_audio, waveform_buckets=args.waveform,
