@@ -43,7 +43,7 @@ struct SettingsView: View {
             tab { cuttingSection; retakeSection; smoothingSection; speechModelSection; fillerModelSection }
                 .tabItem { Label("Cutting", systemImage: "scissors") }
 
-            tab { encodingSection; captionsSection; outputLocationSection; originalsSection }
+            tab { encodingSection; editorSection; captionsSection; outputLocationSection; originalsSection }
                 .tabItem { Label("Output", systemImage: "film.stack") }
 
             tab { presetsSection }
@@ -206,6 +206,28 @@ struct SettingsView: View {
     static func frameRateLabel(_ fps: Double) -> String {
         let whole = fps.rounded() == fps
         return whole ? "\(Int(fps)) fps" : String(format: "%.2f fps", fps)
+    }
+
+    @ViewBuilder private var editorSection: some View {
+        Section {
+            if let editor = EditorDetector.resolve() {
+                Toggle("Send my cuts to a video editor", isOn: $settings.exportToEditor)
+                Text("Crisp finds the cuts and hands them to your editor as a ready-to-edit timeline — no rendering, so it finishes in seconds. Constant-frame-rate footage is copied as-is; variable-frame-rate clips (some screen recordings) are conformed for sync. When it\u{2019}s done, Crisp asks which editor to open and you import the timeline there. Found \(editor.name) on your Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                // Bind to the real setting so a user who enabled this earlier can still
+                // turn it off here; only block enabling it when no editor is installed.
+                Toggle("Send my cuts to a video editor", isOn: $settings.exportToEditor)
+                    .disabled(!settings.exportToEditor)
+                Text("We couldn\u{2019}t find a video editor on your Mac yet. Install DaVinci Resolve (the free version works great) and Crisp can send your cuts straight to it.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Send to a video editor")
+        } footer: {
+            Text("The fastest way out of Crisp \u{2014} skip rendering and finish in your editor. Turn this off to have Crisp render a polished video for you instead.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     @ViewBuilder private var captionsSection: some View {

@@ -455,6 +455,63 @@ final class CrispTests: XCTestCase {
         XCTAssertEqual(valueAfter("--fps", in: args), String(60.0))
     }
 
+    func testEditorDetectorPicksInstalledByID() {
+        // Lite installed, direct/AppStore absent → matches Lite, names it Resolve.
+        let installed = ["com.blackmagic-design.DaVinciResolveLite":
+                            URL(fileURLWithPath: "/Applications/DaVinci Resolve.app")]
+        let editor = EditorDetector.firstInstalled(
+            name: "DaVinci Resolve", ids: EditorDetector.resolveBundleIDs) { installed[$0] }
+        XCTAssertEqual(editor?.id, "com.blackmagic-design.DaVinciResolveLite")
+        XCTAssertEqual(editor?.name, "DaVinci Resolve")
+    }
+
+    func testEditorDetectorPrefersEarlierID() {
+        // The direct-download id is listed first, so it wins when several are present.
+        let all = ["com.blackmagic-design.DaVinciResolve": URL(fileURLWithPath: "/A.app"),
+                   "com.blackmagic-design.DaVinciResolveLite": URL(fileURLWithPath: "/B.app")]
+        let editor = EditorDetector.firstInstalled(
+            name: "R", ids: EditorDetector.resolveBundleIDs) { all[$0] }
+        XCTAssertEqual(editor?.id, "com.blackmagic-design.DaVinciResolve")
+    }
+
+    func testEditorDetectorNilWhenNoneInstalled() {
+        XCTAssertNil(EditorDetector.firstInstalled(name: "X", ids: ["a", "b"]) { _ in nil })
+    }
+
+    func testCleanRunnerEmitsExportTimelineWhenEditorOn() {
+        var cfg = EngineConfig.defaults
+        cfg.exportToEditor = true
+        let params = Strength.balanced.parameters(using: cfg)
+        XCTAssertEqual(params.exportTimeline, "fcpxml")
+        let args = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                         input: URL(fileURLWithPath: "/v/in.mp4"),
+                                         parameters: params,
+                                         options: CleanRunner.Options(modelPath: nil,
+                                                                      removeFillers: false,
+                                                                      removeRetakes: false))
+        XCTAssertEqual(valueAfter("--export-timeline", in: args), "fcpxml")
+    }
+
+    func testCleanRunnerEmitsExportTimelineNoneByDefault() {
+        let params = Strength.balanced.parameters(using: .defaults)
+        XCTAssertEqual(params.exportTimeline, "none")
+        let args = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                         input: URL(fileURLWithPath: "/v/in.mp4"),
+                                         parameters: params,
+                                         options: CleanRunner.Options(modelPath: nil,
+                                                                      removeFillers: false,
+                                                                      removeRetakes: false))
+        // Passed explicitly as "none" so the Swift config — not the script default
+        // — decides; clean_video.py accepts "none" as a valid --export-timeline value.
+        XCTAssertEqual(valueAfter("--export-timeline", in: args), "none")
+    }
+
+    func testExportToEditorConfigDefaultsOffAndForwardCompat() throws {
+        XCTAssertFalse(EngineConfig.defaults.exportToEditor)
+        let legacy = Data(#"{ "version": 2 }"#.utf8)
+        XCTAssertFalse(try JSONDecoder().decode(EngineConfig.self, from: legacy).exportToEditor)
+    }
+
     func testFrameRateConfigDefaultsAndForwardCompat() throws {
         XCTAssertEqual(EngineConfig.defaults.frameRateMode, "auto")
         XCTAssertEqual(EngineConfig.defaults.frameRateValue, 30)
@@ -726,9 +783,18 @@ final class CrispTests: XCTestCase {
         cfg.outputDirectory = "/Volumes/NAS"; cfg.backupOriginal = false
         for strength in [Strength.gentle, .aggressive, .custom] {
             let preset = Preset(name: "P", strength: strength, config: cfg)
-            XCTAssertEqual(preset.parameters(), strength.parameters(using: cfg),
+            XCTAssertEqual(preset.parameters(exportToEditor: cfg.exportToEditor),
+                           strength.parameters(using: cfg),
                            "\(strength.rawValue) preset should match the global path")
         }
+    }
+
+    func testPresetHonorsEditorHandoff() {
+        // The global editor-handoff mode must apply to preset-backed rows too (else they
+        // silently render while "Send to editor" is on).
+        let preset = Preset(name: "P", strength: .balanced, config: .defaults)
+        XCTAssertEqual(preset.parameters(exportToEditor: true).exportTimeline, "fcpxml")
+        XCTAssertEqual(preset.parameters(exportToEditor: false).exportTimeline, "none")
     }
 
     func testPresetRoundTripsThroughConfig() throws {

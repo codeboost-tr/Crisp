@@ -69,6 +69,12 @@ DEFAULT_CONTAINER = "auto"    # auto (match input) | mp4 | mkv | mov | m4v | ts 
 # "passthrough" never touches timing; "constant" always forces DEFAULT_FPS.
 DEFAULT_FPS_MODE = "auto"     # auto | passthrough | constant
 DEFAULT_FPS = 0               # fps for mode=constant; 0 is unset → constant errors. "auto" ignores it (uses the source's own rate)
+
+# Editor handoff (see crisp.timeline). "none" renders a cleaned video as usual;
+# "fcpxml" instead writes ONLY a non-destructive editor project (no render, no
+# encode) — a copy of the original + an .fcpxml referencing the kept ranges that a
+# video editor (DaVinci Resolve) opens to finish the cut. Zero re-encode for CFR.
+DEFAULT_EXPORT_TIMELINE = "none"   # none | fcpxml
 DEFAULT_FILLER_BACKEND = "whisper"  # whisper | coreml (fast on-device classifier)
 
 # Retake removal (see crisp.retake): when you misspeak and immediately say a phrase

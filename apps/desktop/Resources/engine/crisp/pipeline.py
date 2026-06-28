@@ -1,28 +1,196 @@
 """The public engine entry point — orchestrates detect → edit into a clean video."""
 
+import os
+import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 
 from .config import (
     DEFAULT_AUDIO_BITRATE, DEFAULT_AUDIO_CODEC, DEFAULT_BACKUP, DEFAULT_CONTAINER, DEFAULT_CROSSFADE_MS,
-    DEFAULT_FADE_MS, DEFAULT_FPS, DEFAULT_FPS_MODE, DEFAULT_HARDWARE, DEFAULT_KEEP_PAUSE, DEFAULT_MAX_PAUSE,
-    DEFAULT_MODEL, DEFAULT_NOISE_DB, DEFAULT_QUALITY, DEFAULT_REMOVE_RETAKES, DEFAULT_RETAKE_SENSITIVITY,
-    DEFAULT_SNAP_MS, DEFAULT_VIDEO_CODEC, MIN_KEEP, RETAKE_ANCHOR_PAUSE, RETAKE_SENSITIVITY,
+    DEFAULT_EXPORT_TIMELINE, DEFAULT_FADE_MS, DEFAULT_FPS, DEFAULT_FPS_MODE, DEFAULT_HARDWARE,
+    DEFAULT_KEEP_PAUSE, DEFAULT_MAX_PAUSE, DEFAULT_MODEL, DEFAULT_NOISE_DB, DEFAULT_QUALITY,
+    DEFAULT_REMOVE_RETAKES, DEFAULT_RETAKE_SENSITIVITY, DEFAULT_SNAP_MS, DEFAULT_VIDEO_CODEC,
+    MIN_KEEP, RETAKE_ANCHOR_PAUSE, RETAKE_SENSITIVITY,
 )
 from .detect import detect_silences, extract_audio, filler_words, filter_silences, transcribe
-from .edit import (build_keep_segments, gate_fillers_by_silence, make_backup, output_duration,
-                   render, snap_keep_to_zero_crossings, tag_output_source, unique_output_path)
+from .edit import (_output_owner, build_keep_segments, gate_fillers_by_silence, make_backup,
+                   output_duration, render, snap_keep_to_zero_crossings, tag_output_source,
+                   unique_output_path)
 from .encode import (
     audio_args, container_args, default_output_path, resolve_codecs, resolve_container, video_args,
 )
 from .enginelog import EngineLogger
 from .errors import CleanError
 from .framerate import resolve_target_fps
-from .tools import ffprobe_duration, probe_video_fps, which_filler, which_whisper
+from .timeline import build_fcpxml, project_paths, timeline_seconds
+from .tools import (
+    ffmpeg_bin, ffprobe_duration, probe_stream_meta, probe_video_fps, which_filler, which_whisper,
+)
 
 
 def _noop(*_a, **_k):
     pass
+
+
+def _export_editor_project(src, keep, out_dir, project_dir, target_fps,
+                           video_codec, hardware, quality, audio_codec, audio_bitrate,
+                           on_log, logger):
+    """Model-A editor handoff: drop a copy of the ORIGINAL plus a non-destructive
+    FCPXML timeline into a project folder, so an editor (DaVinci Resolve) can open the
+    already-cut footage and still adjust every cut. Returns (fcpxml_path, project_dir,
+    media_copy_path, timeline_seconds) — timeline_seconds is the frame-snapped kept
+    length so reported stats match the actual timeline. The original is never touched.
+
+    A CFR source in an editor-friendly container is copied byte-for-byte (zero
+    re-encode — the whole point). A source that needs normalization (VFR / an explicit
+    constant rate) or sits in a poor editor container (.avi/.flv/no extension) is
+    re-encoded once to CFR .mov, because FCPXML can't represent variable timing and
+    editors choke on those containers."""
+    pdir, media_copy, fcpxml_path = project_paths(src, project_dir or out_dir)
+
+    # An unmuxable / extension-less source becomes a .mov copy (and forces a re-encode);
+    # a byte copy keeping e.g. an .avi extension imports poorly into editors.
+    EDITOR_CONTAINERS = {"mov", "mp4", "m4v", "mkv", "webm"}
+    force_encode = src.suffix.lower().lstrip(".") not in EDITOR_CONTAINERS
+    if force_encode:
+        media_copy = media_copy.with_suffix(".mov")
+
+    # Don't clobber a DIFFERENT source's project that happens to share a stem (mirrors
+    # the render path's unique_output_path + source xattr). Re-exporting the SAME source
+    # reuses — and overwrites — its own project folder.
+    marker = os.fsencode(str(src))
+    base = pdir.name
+    i = 0
+    while True:
+        cand = pdir if i == 0 else pdir.with_name(f"{base} {i}")
+        cand_media, cand_fcp = cand / media_copy.name, cand / fcpxml_path.name
+        if not cand.exists() or _output_owner(cand_media) == marker:
+            pdir, media_copy, fcpxml_path = cand, cand_media, cand_fcp
+            break
+        i += 1
+
+    # Whether THIS run creates the folder — so cleanup-on-failure never deletes a
+    # prior good export when we're re-exporting into (reusing) the same folder.
+    created = not pdir.exists()
+    try:
+        pdir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise CleanError(f"Couldn't create the editor project folder \"{pdir}\".\n{e}") from e
+
+    # Write to temp files and atomically swap them in only once BOTH are ready — so a
+    # failed re-export can never corrupt an existing project (the live media/.fcpxml are
+    # untouched until the final publish), and a partial run leaves only temp files. The
+    # temp marker goes BEFORE the suffix (talk.crisp-tmp.mov) so ffmpeg still infers the
+    # output muxer from the real extension on the re-encode path.
+    media_tmp = media_copy.with_name(f"{media_copy.stem}.crisp-tmp{media_copy.suffix}")
+    fcpxml_tmp = fcpxml_path.with_name(f"{fcpxml_path.stem}.crisp-tmp{fcpxml_path.suffix}")
+    try:
+        if target_fps or force_encode:
+            on_log(f"Making an editor-ready copy at {target_fps} fps…" if target_fps
+                   else "Converting your footage to an editor-friendly format…")
+
+            def _normalize(hw):
+                fps_args = ["-r", str(target_fps)] if target_fps else []
+                cmd = [ffmpeg_bin(), "-y", "-i", str(src),
+                       *video_args(video_codec, hw, quality), *fps_args,
+                       *audio_args(audio_codec, audio_bitrate), str(media_tmp)]
+                logger.command(f"ffmpeg editor-copy ({'hw' if hw else 'sw'})", cmd)
+                r = subprocess.run(cmd, capture_output=True, text=True)
+                logger.tool_result("ffmpeg editor-copy", r.returncode, r.stderr)
+                return r
+
+            res = _normalize(hardware)
+            if (res.returncode != 0 or not media_tmp.exists()) and hardware:
+                # Hardware encoding can be unavailable (e.g. a VM with no media engine);
+                # fall back to software so the handoff still works — mirrors render().
+                logger.notice("Hardware encode failed for the editor copy — retrying in software")
+                on_log("Hardware encoding failed — falling back to software encoding…")
+                res = _normalize(False)
+            if res.returncode != 0 or not media_tmp.exists():
+                raise CleanError(f"Couldn't prepare the editor copy.\n{res.stderr[-1000:]}")
+        else:
+            # CFR, editor-friendly container: a plain copy — no re-encode, no loss, fast.
+            on_log("Copying your footage for the editor…")
+            shutil.copy2(src, media_tmp)
+
+        meta = probe_stream_meta(media_tmp, logger=logger)
+        dur = ffprobe_duration(media_tmp, logger=logger)
+        if dur <= 0:
+            # ffprobe_duration returns 0.0 on failure; build_fcpxml would turn that into
+            # a 1-frame asset. Fail loudly instead of emitting a bogus timeline.
+            raise CleanError("Couldn't read the editor copy's duration.")
+        xml = build_fcpxml(
+            media_uri=media_copy.resolve().as_uri(), name=Path(src).stem,
+            num=meta["fps_num"], den=meta["fps_den"], width=meta["width"], height=meta["height"],
+            audio_rate=meta["audio_rate"], audio_channels=meta["audio_channels"],
+            has_audio=meta["audio_channels"] > 0, duration=dur, keep=keep)
+        fcpxml_tmp.write_text(xml, encoding="utf-8")
+        # Publish both as a unit (stage old aside, replace both, roll back on failure) so
+        # a re-export never leaves a mixed media/timeline project.
+        _publish_atomic(media_tmp, media_copy, fcpxml_tmp, fcpxml_path)
+    except (OSError, CleanError) as e:
+        _cleanup_temp_project(media_tmp, fcpxml_tmp, pdir, created)
+        if isinstance(e, CleanError):
+            raise
+        raise CleanError(f"Couldn't write the editor project.\n{e}") from e
+
+    # Tag the media copy with its source so a later re-export reuses this folder and a
+    # different same-stem source dedups instead of clobbering it.
+    tag_output_source(media_copy, src)
+    logger.info(f"editor project: {pdir} (fcpxml={fcpxml_path.name}, media={media_copy.name})")
+    snapped = timeline_seconds(keep, meta["fps_num"], meta["fps_den"])
+    return fcpxml_path, pdir, media_copy, snapped
+
+
+def _publish_atomic(media_tmp, media_dst, fcpxml_tmp, fcpxml_dst):
+    """Swap both temp files into place so the project updates together or not at all.
+    Stages any existing live files aside, replaces both, and on failure restores them —
+    so a re-export can't leave a half-updated (mixed media + timeline) project. The
+    leftover temp files are removed by the caller's cleanup."""
+    media_bak = media_dst.with_name(media_dst.name + ".crisp-bak") if media_dst.exists() else None
+    fcpxml_bak = fcpxml_dst.with_name(fcpxml_dst.name + ".crisp-bak") if fcpxml_dst.exists() else None
+    if media_bak:
+        os.replace(media_dst, media_bak)
+    if fcpxml_bak:
+        os.replace(fcpxml_dst, fcpxml_bak)
+    try:
+        os.replace(media_tmp, media_dst)
+        os.replace(fcpxml_tmp, fcpxml_dst)
+    except OSError:
+        # Roll back to the previous good versions (or remove a half-published new file).
+        if media_bak and media_bak.exists():
+            os.replace(media_bak, media_dst)
+        elif media_dst.exists():
+            media_dst.unlink()
+        if fcpxml_bak and fcpxml_bak.exists():
+            os.replace(fcpxml_bak, fcpxml_dst)
+        raise
+    for bak in (media_bak, fcpxml_bak):       # success → drop the staged old copies
+        if bak and bak.exists():
+            try:
+                bak.unlink()
+            except OSError:
+                pass
+
+
+def _cleanup_temp_project(media_tmp, fcpxml_tmp, pdir, created):
+    """Remove the temp files from a failed export (the live media/.fcpxml were never
+    touched). Only removes the project dir if THIS run created it and it's now empty —
+    a reused folder (re-export) and its prior good export are always left intact."""
+    for p in (media_tmp, fcpxml_tmp):
+        try:
+            if p.exists():
+                p.unlink()
+        except OSError:
+            pass
+    if not created:
+        return
+    try:
+        if pdir.exists() and not any(pdir.iterdir()):
+            pdir.rmdir()
+    except OSError:
+        pass
 
 
 # Analyze-only captures every candidate gap down to this floor; the app applies the
@@ -70,6 +238,7 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
                 fade_ms=DEFAULT_FADE_MS, crossfade_ms=DEFAULT_CROSSFADE_MS, snap_ms=DEFAULT_SNAP_MS,
                 retake_sensitivity=DEFAULT_RETAKE_SENSITIVITY,
                 fps_mode=DEFAULT_FPS_MODE, fps=DEFAULT_FPS,
+                export_timeline=DEFAULT_EXPORT_TIMELINE, project_dir=None,
                 on_log=None, on_progress=None, logger=None):
     """
     Clean one video. Returns a dict with results.
@@ -130,6 +299,12 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
     # whenever fillers are removed OR captions are requested. But an explicit reviewed
     # keep-list (the app's edit-timeline output) bypasses detection entirely — no audio
     # analysis, transcription, or model — so we render exactly the approved segments.
+    # An editor handoff writes no captions (there's no rendered deliverable to attach
+    # them to), so drop a caption request up front — before it would pull transcription
+    # work that produces nothing. Fillers/retakes still transcribe as needed.
+    if export_timeline == "fcpxml" and captions != "none":
+        on_log("Captions aren't written for an editor handoff — add them in your editor.")
+        captions = "none"
     want_captions = captions != "none"
     # Retake detection needs a real transcript, which the Core ML classifier can't
     # produce. Rather than silently switch a classifier run onto whisper, the engine
@@ -156,7 +331,10 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
         on_log(note)
     on_progress(0.0, "Starting…")
 
-    backup_path = make_backup(src, on_log, backup_dir, logger=logger) if backup else None
+    # Editor-handoff copies the original into the project folder, so a separate backup
+    # would duplicate a (possibly large) file twice — skip it in that mode.
+    do_backup = backup and export_timeline != "fcpxml"
+    backup_path = make_backup(src, on_log, backup_dir, logger=logger) if do_backup else None
     if backup_path:
         on_progress(0.03, "Backed up original")
 
@@ -330,8 +508,47 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
                 f"fillers={stats['fillers']} pauses={stats['pauses']} retakes={stats['retakes']}")
     retake_note = f", {stats['retakes']} repeated takes" if stats["retakes"] else ""
     on_log(f"Removing {stats['fillers']} filler words and {stats['pauses']} pauses{retake_note}.")
-    on_log(f"{duration:.0f}s  →  {kept_dur:.0f}s  (saved {duration - kept_dur:.0f}s)")
 
+    # Editor handoff (Model A): write a non-destructive editor project and STOP — no
+    # render, no encode (that's the whole point: the editor finishes the cut). Branches
+    # out here before the render, so backup/captions/split don't run either.
+    if export_timeline == "fcpxml":
+        on_progress(0.62, "Saving your timeline…")
+        # The editor copy keeps the SOURCE's container (and name), not the chosen output
+        # container — so re-resolve codecs against the source. Otherwise a WebM output
+        # setting (which forces VP9) would try to write VP9 into an .mp4/.mov copy.
+        src_container = resolve_container("auto", src.suffix)
+        ev_codec, ea_codec, ev_hw, _ = resolve_codecs(src_container, video_codec, audio_codec, hardware)
+        fcpxml_path, pdir, media_copy, kept_secs = _export_editor_project(
+            src, keep, out_dir, project_dir, target_fps,
+            ev_codec, ev_hw, quality, ea_codec, audio_bitrate, on_log, logger)
+        # kept_secs is frame-snapped (matches the actual timeline), so the status line
+        # and the returned stats agree.
+        on_log(f"{duration:.0f}s  →  {kept_secs:.0f}s  (saved {duration - kept_secs:.0f}s)")
+        on_progress(1.0, "Done")
+        on_log(f"✅ Your cuts are ready to open in a video editor — {pdir.name}")
+        return {
+            "input": str(src),
+            "output": str(fcpxml_path),
+            "project_dir": str(pdir),
+            "media_output": str(media_copy),
+            "export_timeline": "fcpxml",
+            "backup": str(backup_path) if backup_path else "",
+            "orig_seconds": duration,
+            "new_seconds": kept_secs,
+            "saved_seconds": duration - kept_secs,
+            "fillers": stats["fillers"],
+            "pauses": stats["pauses"],
+            "retakes": stats["retakes"],
+            "peaks": wave_summary["peaks"],
+            "removed": wave_summary["removed"],
+            "video_output": "",
+            "audio_output": "",
+            "srt_output": "",
+            "vtt_output": "",
+        }
+
+    on_log(f"{duration:.0f}s  →  {kept_dur:.0f}s  (saved {duration - kept_dur:.0f}s)")
     audio = audio_args(audio_codec, audio_bitrate)
     mux = container_args(container)
     fade_s, crossfade_s = fade_ms / 1000.0, crossfade_ms / 1000.0
@@ -398,4 +615,7 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
         "audio_output": audio_out,
         "srt_output": srt_out,
         "vtt_output": vtt_out,
+        "export_timeline": "none",
+        "project_dir": "",
+        "media_output": "",
     }
