@@ -377,6 +377,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 if (r.TryGetProperty("project_dir", out var pd) && pd.GetString() is { Length: > 0 } proj)
                     item.OutputPath = proj;
             }
+            if (r.TryGetProperty("backup", out var bk) && bk.GetString() is { Length: > 0 } backup)
+                item.BackupPath = backup;
             item.OrigSeconds = Num(r, "orig_seconds");
             item.SavedSeconds = Num(r, "saved_seconds");
             int pauses = (int)Num(r, "pauses"), fillers = (int)Num(r, "fillers"), retakes = (int)Num(r, "retakes");
@@ -425,6 +427,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [RelayCommand]
     private void Reveal(QueueItem item) => RevealInOS(item.OutputPath);
+
+    [RelayCommand]
+    private void RevealBackup(QueueItem item) => RevealInOS(item.BackupPath);
 
     [RelayCommand]
     private void RevealAll()

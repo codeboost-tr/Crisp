@@ -69,6 +69,7 @@ sealed class Program
         if (args.Contains("--retakes")) vm.RemoveRetakes = true;
         if (args.Contains("--export")) vm.Settings.ExportToEditor = true;
         if (args.Contains("--split")) { vm.Settings.SplitTracks = true; vm.Settings.SplitAudioFormat = "wav"; }
+        if (args.Contains("--backup")) vm.Settings.BackupOriginal = true;
         var videos = args.Where(a => !a.StartsWith("--")).ToArray();
         vm.AddFiles(videos);
         Console.WriteLine($"toggles: fillers={vm.RemoveFillers} retakes={vm.RemoveRetakes} needsModel={vm.NeedsModel}");
@@ -83,7 +84,7 @@ sealed class Program
         var ok = true;
         foreach (var item in vm.Queue)
         {
-            Console.WriteLine($"  {item.Status,-9} {item.FileName}  editor={item.IsEditorExport}  out={item.OutputPath}  cuts=[{item.CutsSummary}]  err={item.Error}");
+            Console.WriteLine($"  {item.Status,-9} {item.FileName}  hasBackup={item.HasBackup}  backup={item.BackupPath}  cuts=[{item.CutsSummary}]  err={item.Error}");
             ok &= item.Status == Crisp.Models.QueueStatus.Done;
         }
         Console.WriteLine($"summary: {vm.SummaryText}");

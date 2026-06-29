@@ -33,7 +33,12 @@ public partial class QueueItem : ObservableObject
     private double _savedSeconds;
     [ObservableProperty] private string _cutsSummary = "";
     [ObservableProperty] private string? _outputPath;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasBackup))]
+    private string? _backupPath; // the backed-up pristine original, when one was kept
     [ObservableProperty] private bool _isEditorExport; // result is an editor project, not a render
+
+    public bool HasBackup => !string.IsNullOrEmpty(BackupPath);
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ErrorText))]
     private string? _error;

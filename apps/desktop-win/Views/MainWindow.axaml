@@ -200,6 +200,9 @@
                                         <Button IsVisible="{Binding IsDone}" Content="Reveal"
                                                 Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).RevealCommand}"
                                                 CommandParameter="{Binding}"/>
+                                        <Button IsVisible="{Binding HasBackup}" Content="Backup" ToolTip.Tip="Show the backed-up original"
+                                                Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).RevealBackupCommand}"
+                                                CommandParameter="{Binding}"/>
                                         <Button IsVisible="{Binding IsFailed}" Content="Retry"
                                                 Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).RetryCommand}"
                                                 CommandParameter="{Binding}"/>
