@@ -68,4 +68,5 @@ Legend: ✅ done · 🔜 remaining · 🟡 partial · ⛔ N/A on Windows (Apple-
 - ⛔ App Intents / Shortcuts (macOS); a CLI could substitute
 - ⛔ xattr output tag (BSD-only; `.crisp-source` sidecar covers re-clean dedup)
 - ⛔ ResourceGovernor / Ultra preflight (replaced by simple bounded concurrency)
-- 🔜 Licensing (Polar.sh) — after it lands in `nightly`
+- ⛔ Licensing — out of scope: Windows stays free + open source (no monetization until the
+  port is a proven 1:1 functional match; no license code is added here)

@@ -85,12 +85,13 @@ jobs:
           name: Crisp-win-x64
           path: apps/desktop-win/publish
 
-  # Heavy: vendors the engine binaries (ffmpeg/whisper/python, pinned + hash-checked)
-  # and produces a fully self-contained bundle. Gated off per-PR runs (it downloads
-  # ffmpeg + builds whisper.cpp); runs on push to main/nightly or manual dispatch.
+  # Vendors the engine binaries (ffmpeg/whisper/python, pinned + hash-checked) and
+  # produces the self-contained bundle + Crisp-Setup.exe installer — the build a user
+  # actually runs. The vendored binaries are cached on the vendor-script hash, so the
+  # heavy ffmpeg download + whisper.cpp build only happen when the pins change; after
+  # that the bundle is produced on every push, downloadable from the run's artifacts.
   package:
-    name: Bundle self-contained (win-x64)
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/nightly'))
+    name: Bundle self-contained + installer (win-x64)
     runs-on: windows-latest
     needs: build
     defaults:
@@ -104,6 +105,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+
+      - name: Cache vendored binaries
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop-win/.vendor/bin
+          key: vendor-win-${{ hashFiles('apps/desktop-win/Scripts/vendor-win.ps1') }}
 
       - name: Vendor engine binaries (ffmpeg/whisper/python, pinned)
         run: pwsh Scripts/vendor-win.ps1
