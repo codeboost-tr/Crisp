@@ -120,3 +120,16 @@ jobs:
         with:
           name: Crisp-win-x64-bundle
           path: apps/desktop-win/publish
+
+      - name: Build installer (Inno Setup)
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          $ver = if ($env:CRISP_VERSION) { $env:CRISP_VERSION } else { "0.0" }
+          & $iscc "/DSourceDir=$PWD\publish" "/DAppVersion=$ver" Scripts\crisp.iss
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: Crisp-Setup
+          path: apps/desktop-win/Scripts/Crisp-Setup.exe
