@@ -10,6 +10,46 @@ impact-per-effort. Living doc — add/reorder freely.
 
 ---
 
+## 🎯 Committed priority (locked order — June 2026)
+
+Two **foundations** come before any new feature work:
+
+1. **Licensing & paid tier — Polar.sh** (#22) — stand up the monetization layer.
+2. **Windows support** (#23) — shared Python core + a native Windows UI.
+
+Then the next wave of features, in this order:
+
+3. **Captions / subtitles export** (#15)
+4. **Auto-reframe to vertical / short-form** (#16)
+5. **"Studio sound" audio pass** (#19)
+6. **Speaker diarization** (#17)
+7. **Cut / chapter markers written during the cut** (#24)
+8. **Audio volume / gain control** (#25)
+
+Everything else below stays in the backlog.
+
+---
+
+## 🧱 Foundations (business & platform — do these first)
+
+22. **Licensing & paid tier — Polar.sh.** Gate a paid tier behind a license, using
+    **Polar.sh** as the Merchant of Record (it handles global sales tax / VAT and
+    payouts — important since the user is in Pakistan, where Stripe isn't available).
+    License activation / validation mirrors the existing `ModelStore` lifecycle: a
+    trial → license-key (or OAuth) gate, state derived from disk and re-checked at
+    launch, offline-tolerant. **Stay GPL-3.0** — the license gates the official builds
+    and convenience, not the source. Supersedes the earlier Lemon Squeezy plan.
+    **Do this first.**
+23. **Windows support.** Reuse the stdlib Python engine **as-is** — it already shells
+    out to ffmpeg / ffprobe / whisper.cpp, all of which ship Windows builds — and
+    build a **native Windows front-end** (e.g. WinUI 3 / Windows App SDK) that mirrors
+    the macOS app's UI/UX one-to-one. Port the cross-cutting pieces: the `Channel`
+    identity model, the GitHub-release updater, binary vendoring + signing, the
+    data-home / logs paths, and the shell integration (Explorer right-click / context
+    menu, the Shortcuts equivalent). One engine, two native shells. **Do this second.**
+
+---
+
 ## 🎨 Polish (premium feel)
 
 1. **Before/after preview of the *result*** — scrub/play the cleaned result (or A/B
@@ -74,6 +114,7 @@ impact-per-effort. Living doc — add/reorder freely.
 11. **Chapter detection + export** — auto-generate YouTube / podcast chapter markers
     from long pauses + transcript topic shifts; export as chapter metadata or a
     timestamp list. Reuses the existing transcript; concrete, visible creator value.
+    (See also #24 — markers written at cut points.)
 
 ## 🤝 Trust (build on what just shipped — retakes)
 
@@ -111,15 +152,17 @@ by coolness × leverage ÷ effort.*
     transcription already runs and the words are currently discarded. Add sidecar
     subtitle files plus an optional burned-in "open caption" style. Table-stakes creator
     value at almost zero engine cost. Pairs perfectly with #9 (multi-language).
+    **→ Committed priority #3.**
 
 ### Reach (new audiences, same engine)
 
 16. **Auto-reframe to vertical (Shorts / Reels / TikTok).** Use macOS **Vision** face
     detection to keep the speaker centered, then ffmpeg-crop to 9:16. One horizontal
     recording → a ready-to-post vertical. A reach bomb — opens the entire short-form
-    creator market with a native, no-dependency face tracker.
+    creator market with a native, no-dependency face tracker. **→ Committed priority #4.**
 17. **Speaker diarization** (whisper.cpp `tinydiarize`) — label who spoke when. Unlocks
     interviews/podcasts and makes audio-first mode (#10) genuinely useful.
+    **→ Committed priority #6.**
 18. **Highlight / clip extraction** — use long pauses + transcript topic shifts (the same
     signal as chapter detection #11) to auto-suggest 2–3 short clips from a long
     recording. A "give me the highlights" button.
@@ -129,6 +172,7 @@ by coolness × leverage ÷ effort.*
 19. **"Studio sound" audio pass.** ffmpeg `afftdn` / `arnndn` denoise + `loudnorm` to
     **-14 LUFS** (YouTube's target) behind one toggle — audio that sounds mastered. Low
     effort, high perceived quality; on-brand with "honest about quality."
+    **→ Committed priority #5.**
 20. **Auto-zoom / punch-in to mask jump cuts.** A subtle scale/crossfade after each cut
     so joins don't feel jarring — mechanical jump-cuts start to look intentionally
     edited. Pairs with #2 ("play across this cut") and the smooth-cuts work.
@@ -139,10 +183,23 @@ by coolness × leverage ÷ effort.*
 
 ---
 
-## Suggested sequence
-1. **Captions / subtitles export** (#15 — almost free, ships fast)
-2. **Result preview + keyboard review** (#1 / #2 — polish, low risk)
-3. **Transcript-based editing** (#14 — the flagship)
-4. **Multi-language** (#9 — biggest audience expansion)
-5. **Smart-cut** (#4 — big project, highest speed payoff)
-6. **Feedback loop** (#8 — the flywheel)
+## 🎚️ Audio & markers
+
+24. **Cut / chapter markers written during the cut.** As Crisp makes each cut, drop a
+    marker at the join — exported as chapter metadata (mp4/mov), a sidecar timestamp
+    list, and editor markers in the FCPXML handoff — so cuts (and detected chapters,
+    #11) are visible and navigable in players and editors. Reuses the cut boundaries the
+    engine already computes. **→ Committed priority #7.**
+25. **Audio volume / gain control.** Let the user raise or lower the output volume — a
+    manual gain (dB) control via the ffmpeg `volume` filter, distinct from the automatic
+    loudness normalization in #19. Useful for quiet mics; pairs with the "studio sound"
+    pass and lives next to the encoder knobs in Settings. **→ Committed priority #8.**
+
+---
+
+## Backlog (longer-horizon, after the committed priority above)
+- **Result preview + keyboard review** (#1 / #2 — polish, low risk)
+- **Multi-language** (#9 — biggest audience expansion; pairs with captions #15)
+- **Transcript-based editing** (#14 — flagship, larger build)
+- **Smart-cut** (#4 — big project, highest speed payoff)
+- **Feedback loop** (#8 — the flywheel)
