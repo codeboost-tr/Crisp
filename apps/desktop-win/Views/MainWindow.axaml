@@ -81,21 +81,32 @@
                     <!-- LEADING: recipe / progress / summary -->
                     <Panel Grid.Column="0" VerticalAlignment="Center">
                         <!-- recipe (idle, files pending) -->
-                        <StackPanel Orientation="Horizontal" Spacing="18" IsVisible="{Binding BottomShowsRecipe}">
-                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <TextBlock Classes="secondary" Text="Cut" VerticalAlignment="Center"/>
-                                <ComboBox ItemsSource="{Binding StrengthOptions}" SelectedItem="{Binding SelectedStrength}"
-                                          MinWidth="130">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="models:StrengthPreset">
-                                            <TextBlock Text="{Binding Name}"/>
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
+                        <StackPanel IsVisible="{Binding BottomShowsRecipe}" Spacing="5" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="18">
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Classes="secondary" Text="Cut" VerticalAlignment="Center"/>
+                                    <ComboBox ItemsSource="{Binding StrengthOptions}" SelectedItem="{Binding SelectedStrength}"
+                                              MinWidth="130">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="models:StrengthPreset">
+                                                <TextBlock Text="{Binding Name}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </StackPanel>
+                                <CheckBox Content="Remove fillers" IsChecked="{Binding RemoveFillers}" VerticalAlignment="Center"/>
+                                <CheckBox Content="Remove retakes" IsChecked="{Binding RemoveRetakes}" VerticalAlignment="Center"
+                                          ToolTip.Tip="Remove a phrase you flubbed and immediately said again, keeping the corrected take."/>
                             </StackPanel>
-                            <CheckBox Content="Remove fillers" IsChecked="{Binding RemoveFillers}" VerticalAlignment="Center"/>
-                            <CheckBox Content="Remove retakes" IsChecked="{Binding RemoveRetakes}" VerticalAlignment="Center"
-                                      ToolTip.Tip="Remove a phrase you flubbed and immediately said again, keeping the corrected take."/>
+                            <Panel HorizontalAlignment="Left">
+                                <Button Content="Estimate savings" Command="{Binding EstimateCommand}"
+                                        Padding="0" Background="Transparent" BorderThickness="0"
+                                        Foreground="{DynamicResource CrispAccent}"
+                                        IsVisible="{Binding EstimateText, Converter={x:Static StringConverters.IsNullOrEmpty}}"/>
+                                <TextBlock Classes="secondary" FontSize="12" Text="{Binding EstimateText}"
+                                           TextTrimming="CharacterEllipsis"
+                                           IsVisible="{Binding EstimateText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                            </Panel>
                         </StackPanel>
                         <!-- progress (running) -->
                         <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding IsRunning}">

@@ -170,6 +170,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 && VideoExtensions.Contains(Path.GetExtension(p))
                 && !Queue.Any(q => string.Equals(q.Path, p, StringComparison.OrdinalIgnoreCase)))
                 Queue.Add(new QueueItem(p));
+        EstimateText = ""; // queue changed → any estimate is stale
     }
 
     [RelayCommand]
@@ -246,6 +247,52 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [RelayCommand]
     private void Cancel() => _cts?.Cancel();
+
+    [ObservableProperty] private string _estimateText = "";
+    [ObservableProperty] private bool _isEstimating;
+
+    /// Pre-flight "≈ X saved" — runs the engine's fast analyze pass on the waiting files
+    /// and applies the pause-cut math (pauses only; fillers/retakes are counted while
+    /// cleaning since they need transcription).
+    [RelayCommand]
+    private async Task Estimate()
+    {
+        var waiting = Queue.Where(q => q.Status == QueueStatus.Waiting).ToList();
+        if (waiting.Count == 0 || IsRunning || IsEstimating) return;
+        IsEstimating = true;
+        EstimateText = "Estimating…";
+
+        var custom = SelectedStrength.Value == Strength.Custom;
+        double pause = custom ? Settings.PauseThreshold : SelectedStrength.Pause;
+        double keep = custom ? Settings.BreathingRoom : SelectedStrength.KeepPause;
+        double totalDur = 0, removed = 0;
+        int pauses = 0, failed = 0;
+
+        foreach (var item in waiting)
+        {
+            var raw = await _engine.AnalyzeAsync(item.Path, CancellationToken.None);
+            if (raw is null) { failed++; continue; }
+            try
+            {
+                using var doc = JsonDocument.Parse(raw);
+                var r = doc.RootElement;
+                totalDur += r.TryGetProperty("duration", out var d) ? d.GetDouble() : 0;
+                if (r.TryGetProperty("silences", out var sil) && sil.ValueKind == JsonValueKind.Array)
+                    foreach (var s in sil.EnumerateArray())
+                    {
+                        double len = s[1].GetDouble() - s[0].GetDouble();
+                        if (len > pause) { removed += Math.Max(0, len - 2 * keep); pauses++; }
+                    }
+            }
+            catch (JsonException) { failed++; }
+        }
+
+        var pct = totalDur > 0 ? (int)(removed / totalDur * 100) : 0;
+        EstimateText = $"≈ {Formatting.Duration(removed)} saved · {pauses} pause{(pauses == 1 ? "" : "s")} ({pct}% shorter)"
+            + (failed > 0 ? " · some files couldn't be read" : "")
+            + " · fillers & retakes counted while cleaning";
+        IsEstimating = false;
+    }
 
     private async Task CleanItem(QueueItem item, IReadOnlyList<string> args, CancellationToken ct)
     {

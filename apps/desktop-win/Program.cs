@@ -53,6 +53,11 @@ sealed class Program
         if (args.Length >= 2 && args[0] == "--watch-test")
             return RunWatchTest(args[1]);
 
+        // Headless savings-estimate check.
+        //   dotnet run -- --estimate-test <a-video>
+        if (args.Length >= 2 && args[0] == "--estimate-test")
+            return RunEstimateTest(args[1]).GetAwaiter().GetResult();
+
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         return 0;
     }
@@ -183,6 +188,15 @@ sealed class Program
         var ok = reloaded.Entries.Count == 2 && reloaded.Entries[0].InputName == "second.mp4"; // newest first
         Console.WriteLine($"history: persisted={reloaded.Entries.Count} newestFirst={reloaded.Entries[0].InputName} saved0={reloaded.Entries[0].SavedText} cuts0=[{reloaded.Entries[0].CutsText}] -> {(ok ? "OK" : "FAIL")}");
         return ok ? 0 : 1;
+    }
+
+    private static async Task<int> RunEstimateTest(string video)
+    {
+        var vm = new Crisp.ViewModels.MainWindowViewModel();
+        vm.AddFiles(new[] { video });
+        await vm.EstimateCommand.ExecuteAsync(null);
+        Console.WriteLine($"estimate: {vm.EstimateText}");
+        return vm.EstimateText.Contains("saved") ? 0 : 1;
     }
 
     private static int RunWatchTest(string sampleVideo)

@@ -43,9 +43,9 @@ Legend: ✅ done · 🔜 remaining · 🟡 partial · ⛔ N/A on Windows (Apple-
 - ✅ Drag-drop / file picker / "Open With" (multi-file, video allow-list)
 
 ## Remaining app features (the loop is working through these)
-- 🔜 Watch folder (auto-clean a folder) — in-app watcher v1; background-when-closed = Windows service follow-up
+- ✅ Watch folder (auto-clean a folder) — in-app watcher; background-when-closed = Windows service follow-up
 - 🔜 Presets (named recipes a queue row can pick)
-- 🔜 Savings estimate (pre-flight "≈ X saved" before cleaning)
+- ✅ Savings estimate (pre-flight "≈ X saved" before cleaning)
 - 🔜 Preview player (play the cleaned output in-app)
 - 🔜 Review & edit cuts (waveform timeline, manual keep/cut)
 - 🔜 Cut preview (waveform of what will be removed)

@@ -92,6 +92,25 @@ public sealed class CrispEngine
         return proc.ExitCode;
     }
 
+    /// Fast pre-flight analysis (no transcription/render) — returns the raw "analysis"
+    /// NDJSON ({duration, silences}) for a savings estimate, or null if it failed.
+    public async Task<string?> AnalyzeAsync(string videoPath, CancellationToken ct)
+    {
+        string? raw = null;
+        var capture = new ActionProgress(ev => { if (ev.Event == "analysis") raw = ev.Raw; });
+        try { await RunAsync(videoPath, new[] { "--analyze" }, capture, ct); }
+        catch (OperationCanceledException) { throw; }
+        catch { return null; }
+        return raw;
+    }
+
+    private sealed class ActionProgress : IProgress<EngineEvent>
+    {
+        private readonly Action<EngineEvent> _on;
+        public ActionProgress(Action<EngineEvent> on) => _on = on;
+        public void Report(EngineEvent value) => _on(value); // synchronous capture
+    }
+
     private string ResolvePython(string binDir, string exe)
     {
         if (!string.IsNullOrEmpty(PythonPath)) return PythonPath!;
