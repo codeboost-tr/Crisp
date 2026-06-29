@@ -58,6 +58,11 @@ public sealed class EngineConfig
     public bool WatchEnabled { get; set; }
     public string WatchFolderPath { get; set; } = "";
 
+    // Presets: named recipes a queue row can pick; defaultPresetID is which one new
+    // files start on (shared shape + keys with macOS).
+    public List<Preset> Presets { get; set; } = new();
+    [JsonPropertyName("defaultPresetID")] public string DefaultPresetId { get; set; } = "";
+
     /// Every other key in the file (presets, watch, concurrency, model ids, …) —
     /// preserved verbatim on round-trip so the Windows app never drops them.
     [JsonExtensionData] public Dictionary<string, JsonElement> Extra { get; set; } = new();

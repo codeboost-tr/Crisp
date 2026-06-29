@@ -174,7 +174,7 @@ public partial class MainWindowViewModel : ViewModelBase
             if (File.Exists(p)
                 && VideoExtensions.Contains(Path.GetExtension(p))
                 && !Queue.Any(q => string.Equals(q.Path, p, StringComparison.OrdinalIgnoreCase)))
-                Queue.Add(new QueueItem(p));
+                Queue.Add(new QueueItem(p) { PresetId = Settings.DefaultPresetId });
         EstimateText = ""; // queue changed → any estimate is stale
     }
 
@@ -213,7 +213,6 @@ public partial class MainWindowViewModel : ViewModelBase
         RefreshCounts();
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
-        var args = BuildArgs();
         using var slot = new SemaphoreSlim(Settings.Concurrency);
 
         try
@@ -225,7 +224,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 try
                 {
                     await slot.WaitAsync(ct);
-                    try { await CleanItem(item, args, ct); }
+                    try { await CleanItem(item, ct); }
                     finally { slot.Release(); }
                 }
                 catch (OperationCanceledException) { item.Status = QueueStatus.Cancelled; }
@@ -300,12 +299,14 @@ public partial class MainWindowViewModel : ViewModelBase
         IsEstimating = false;
     }
 
-    private async Task CleanItem(QueueItem item, IReadOnlyList<string> args, CancellationToken ct)
+    private async Task CleanItem(QueueItem item, CancellationToken ct)
     {
         item.Status = QueueStatus.Running;
         item.Progress = 0;
         item.Stage = "Starting…";
         item.Error = null;
+        // Per-row recipe: a row's preset (if any) overrides the global recipe knobs.
+        var args = BuildArgs(Settings.PresetById(item.PresetId));
         var progress = new Progress<EngineEvent>(ev => OnItemEvent(item, ev));
 
         var code = await _engine.RunAsync(item.Path, args, progress, ct);
@@ -316,11 +317,12 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private IReadOnlyList<string> BuildArgs()
+    private IReadOnlyList<string> BuildArgs(Preset? preset = null)
     {
         // The recipe (cutting + smoothing + encoding + backup + captions) comes from
-        // Settings; the VM only adds the filler/retake/model flags.
-        var args = new List<string>(Settings.RecipeArgs(SelectedStrength.Value));
+        // Settings (or the row's preset, which overrides the recipe knobs); the VM only
+        // adds the filler/retake/model flags.
+        var args = new List<string>(Settings.RecipeArgs(SelectedStrength.Value, preset));
 
         // Both fillers and retakes need whisper to transcribe; pauses-only needs no model.
         if ((RemoveFillers || RemoveRetakes) && ActiveModelPath is { } modelPath)

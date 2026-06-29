@@ -23,6 +23,10 @@ public partial class QueueItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsWaiting), nameof(IsRunning), nameof(IsDone), nameof(IsFailed))]
     private QueueStatus _status = QueueStatus.Waiting;
 
+    /// Which preset this row cleans with (empty = the global recipe). A queue picker
+    /// sets it; new files inherit the default preset.
+    [ObservableProperty] private string _presetId = "";
+
     [ObservableProperty] private double _progress;   // 0…1, this file alone
     [ObservableProperty] private string _stage = ""; // "Rendering video… 45%"
     [ObservableProperty]

@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Crisp.Models;
 
@@ -47,6 +49,52 @@ public partial class EngineSettings : ObservableObject
     public string[] SplitAudioFormats { get; } = { "match", "wav" };
     [ObservableProperty] private bool _watchEnabled;
     [ObservableProperty] private string _watchFolderPath = "";
+
+    // Presets: named recipes a queue row can pick; DefaultPresetId is the one new files
+    // start on. Shared shape + keys with macOS, so a preset created on either round-trips.
+    public ObservableCollection<Preset> Presets { get; } = new();
+    [ObservableProperty] private string _defaultPresetId = "";
+
+    public Preset? DefaultPreset => PresetById(DefaultPresetId);
+    public Preset? PresetById(string? id) =>
+        string.IsNullOrEmpty(id) ? null : Presets.FirstOrDefault(p => p.Id == id);
+
+    /// Snapshot the current global recipe into a new preset under `name`.
+    public Preset AddPreset(string name, Strength strength)
+    {
+        var p = new Preset
+        {
+            Name = name,
+            Strength = Strengths.RawValue(strength),
+            PauseThreshold = PauseThreshold, SilenceFloorDB = SilenceFloorDB,
+            BreathingRoom = BreathingRoom, MinKeep = MinKeep,
+            VideoCodec = VideoCodec, HardwareEncoding = HardwareEncoding, VideoQuality = VideoQuality,
+            AudioCodec = AudioCodec, AudioBitrateKbps = AudioBitrateKbps,
+            OutputContainer = OutputContainer, ColorDepth = ColorDepth, BackupOriginal = BackupOriginal,
+        };
+        Presets.Add(p);
+        Save();
+        return p;
+    }
+
+    public void RenamePreset(string id, string name)
+    {
+        var p = PresetById(id);
+        if (p is null) return;
+        p.Name = name;
+        Save();
+    }
+
+    public void DeletePreset(string id)
+    {
+        var p = PresetById(id);
+        if (p is null) return;
+        Presets.Remove(p);
+        if (DefaultPresetId == id) DefaultPresetId = ""; // triggers Save via OnPropertyChanged
+        else Save();
+    }
+
+    public void SetDefaultPreset(string? id) => DefaultPresetId = id ?? "";
 
     /// Explorer right-click "Clean with Crisp" — lives in the registry, not settings.json.
     public bool ExplorerIntegration
@@ -113,6 +161,8 @@ public partial class EngineSettings : ObservableObject
         SplitAudioFormat = _config.SplitAudioFormat;
         WatchEnabled = _config.WatchEnabled;
         WatchFolderPath = _config.WatchFolderPath;
+        foreach (var p in _config.Presets) Presets.Add(p);
+        DefaultPresetId = _config.DefaultPresetId;
         _loading = false;
     }
 
@@ -152,6 +202,8 @@ public partial class EngineSettings : ObservableObject
         _config.SplitAudioFormat = SplitAudioFormat;
         _config.WatchEnabled = WatchEnabled;
         _config.WatchFolderPath = WatchFolderPath;
+        _config.Presets = Presets.ToList();
+        _config.DefaultPresetId = DefaultPresetId;
         _config.Save();
     }
 
@@ -160,34 +212,39 @@ public partial class EngineSettings : ObservableObject
     /// The per-clean recipe (cutting + smoothing + encoding + backup + captions). The
     /// caller appends filler/retake/model flags. Cutting uses the strength preset, or
     /// the saved knobs for the Custom strength (mirrors Strength.parameters(using:)).
-    public IReadOnlyList<string> RecipeArgs(Models.Strength strength)
+    ///
+    /// When `preset` is non-null the cut + encode + container + colour-depth + backup
+    /// knobs come from the preset (a named per-row recipe); smoothing, fps, captions,
+    /// split and editor-handoff stay global output modes.
+    public IReadOnlyList<string> RecipeArgs(Models.Strength strength, Models.Preset? preset = null)
     {
         var a = new List<string>();
+        var eff = preset is null ? strength : Models.Strengths.Parse(preset.Strength);
 
-        if (strength == Models.Strength.Custom)
+        if (eff == Models.Strength.Custom)
         {
-            a.Add("--pause"); a.Add(F(PauseThreshold));
-            a.Add("--keep-pause"); a.Add(F(BreathingRoom));
+            a.Add("--pause"); a.Add(F(preset?.PauseThreshold ?? PauseThreshold));
+            a.Add("--keep-pause"); a.Add(F(preset?.BreathingRoom ?? BreathingRoom));
         }
         else
         {
-            var p = Models.Strengths.Of(strength);
+            var p = Models.Strengths.Of(eff);
             a.Add("--pause"); a.Add(F(p.Pause));
             a.Add("--keep-pause"); a.Add(F(p.KeepPause));
         }
-        a.Add("--noise"); a.Add(F(SilenceFloorDB));
-        a.Add("--min-keep"); a.Add(F(MinKeep));
+        a.Add("--noise"); a.Add(F(preset?.SilenceFloorDB ?? SilenceFloorDB));
+        a.Add("--min-keep"); a.Add(F(preset?.MinKeep ?? MinKeep));
         a.Add("--fade-ms"); a.Add(F(FadeMs));
         a.Add("--crossfade-ms"); a.Add(F(CrossfadeMs));
         a.Add("--snap-ms"); a.Add(F(SnapMs));
 
-        a.Add("--video-codec"); a.Add(VideoCodec);
-        if (HardwareEncoding) a.Add("--hardware");
-        a.Add("--quality"); a.Add(VideoQuality);
-        a.Add("--audio-codec"); a.Add(AudioCodec);
-        a.Add("--audio-bitrate"); a.Add(AudioBitrateKbps.ToString(CultureInfo.InvariantCulture));
-        a.Add("--container"); a.Add(OutputContainer);
-        a.Add("--color-depth"); a.Add(ColorDepth);
+        a.Add("--video-codec"); a.Add(preset?.VideoCodec ?? VideoCodec);
+        if (preset?.HardwareEncoding ?? HardwareEncoding) a.Add("--hardware");
+        a.Add("--quality"); a.Add(preset?.VideoQuality ?? VideoQuality);
+        a.Add("--audio-codec"); a.Add(preset?.AudioCodec ?? AudioCodec);
+        a.Add("--audio-bitrate"); a.Add((preset?.AudioBitrateKbps ?? AudioBitrateKbps).ToString(CultureInfo.InvariantCulture));
+        a.Add("--container"); a.Add(preset?.OutputContainer ?? OutputContainer);
+        a.Add("--color-depth"); a.Add(preset?.ColorDepth ?? ColorDepth);
         a.Add("--fps-mode"); a.Add(FrameRateMode);
         if (FrameRateMode == "constant" && FrameRateValue > 0)
         {
@@ -198,7 +255,7 @@ public partial class EngineSettings : ObservableObject
         if (ExportToEditor) { a.Add("--export-timeline"); a.Add("fcpxml"); } // editor handoff, no render
         if (SplitTracks) { a.Add("--split"); a.Add("--split-audio"); a.Add(SplitAudioFormat); }
 
-        if (BackupOriginal)
+        if (preset?.BackupOriginal ?? BackupOriginal)
         {
             // Collect originals in a dated folder under the data home — not scattered in
             // an _originals/ folder beside each source (CLAUDE.md product philosophy #2).

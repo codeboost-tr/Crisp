@@ -58,6 +58,11 @@ sealed class Program
         if (args.Length >= 2 && args[0] == "--estimate-test")
             return RunEstimateTest(args[1]).GetAwaiter().GetResult();
 
+        // Headless preset round-trip + recipe-override check (uses a throwaway config dir).
+        //   dotnet run -- --preset-test
+        if (args.Length >= 1 && args[0] == "--preset-test")
+            return RunPresetTest();
+
         // Headless shell-integration probe (no-op off Windows).
         //   dotnet run -- --shell-test
         if (args.Length >= 1 && args[0] == "--shell-test")
@@ -224,6 +229,43 @@ sealed class Program
         Console.WriteLine($"watch: detected={got} path={(got ? detected.Task.Result : "(none)")}");
         try { Directory.Delete(tmp, true); } catch { }
         return got && detected.Task.Result.EndsWith("incoming.mp4") ? 0 : 1;
+    }
+
+    private static int RunPresetTest()
+    {
+        // Point the config at a temp dir so the user's real settings.json is untouched.
+        var dir = Path.Combine(Path.GetTempPath(), "crisp-preset-test");
+        try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
+        Directory.CreateDirectory(dir);
+        Environment.SetEnvironmentVariable("CRISP_CONFIG_DIR", dir);
+
+        var ok = true;
+        void Check(bool c, string what) { Console.WriteLine($"  [{(c ? "ok" : "FAIL")}] {what}"); ok &= c; }
+
+        // Create a preset that differs from the global recipe, then reload from disk.
+        var s1 = new Crisp.Services.EngineSettings { VideoCodec = "h264", AudioCodec = "opus", OutputContainer = "mkv" };
+        var p = s1.AddPreset("Tiny", Crisp.Models.Strength.Gentle);
+        s1.SetDefaultPreset(p.Id);
+
+        var s2 = new Crisp.Services.EngineSettings(); // re-read settings.json
+        Check(s2.Presets.Count == 1 && s2.Presets[0].Name == "Tiny", "preset persisted + reloaded");
+        Check(s2.DefaultPresetId == p.Id, "default preset id persisted");
+        Check(s2.Presets[0].VideoCodec == "h264" && s2.Presets[0].OutputContainer == "mkv", "preset captured global recipe");
+        Check(s2.Presets[0].Strength == "Gentle", "preset strength rawValue matches macOS");
+
+        // The preset overrides the recipe knobs; a Gentle preset implies --pause 0.8.
+        var recipe = string.Join(" ", s2.RecipeArgs(Crisp.Models.Strength.Aggressive, s2.Presets[0]));
+        Check(recipe.Contains("--video-codec h264"), "recipe uses preset video codec");
+        Check(recipe.Contains("--container mkv"), "recipe uses preset container");
+        Check(recipe.Contains("--pause 0.8"), "recipe uses preset (Gentle) pause threshold");
+
+        s2.DeletePreset(p.Id);
+        var s3 = new Crisp.Services.EngineSettings();
+        Check(s3.Presets.Count == 0 && string.IsNullOrEmpty(s3.DefaultPresetId), "delete clears preset + default");
+
+        try { Directory.Delete(dir, true); } catch { }
+        Console.WriteLine($"preset-test: {(ok ? "PASS" : "FAIL")}");
+        return ok ? 0 : 1;
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.

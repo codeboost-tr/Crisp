@@ -38,4 +38,14 @@ public static class Strengths
         foreach (var p in All) if (p.Value == s) return p;
         return All[2]; // Aggressive
     }
+
+    /// The on-disk token for a strength — matches macOS Strength.rawValue (the full
+    /// name, e.g. "Very aggressive") so presets round-trip through the shared settings.json.
+    public static string RawValue(Strength s) => Of(s).Name;
+
+    public static Strength Parse(string raw)
+    {
+        foreach (var p in All) if (string.Equals(p.Name, raw, System.StringComparison.OrdinalIgnoreCase)) return p.Value;
+        return Strength.Custom;
+    }
 }
