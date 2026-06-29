@@ -13,6 +13,7 @@ namespace Crisp.Views;
 public partial class MainWindow : Window
 {
     private MainWindowViewModel? Vm => DataContext as MainWindowViewModel;
+    private MainWindowViewModel? _subscribedVm;
     private WindowNotificationManager? _notifications;
 
     public MainWindow()
@@ -47,8 +48,12 @@ public partial class MainWindow : Window
 
     protected override void OnDataContextChanged(EventArgs e)
     {
+        // Detach from the previous view model, not the new one, so a rebind can't leave a
+        // stale BatchCompleted subscription behind (duplicate toasts / a leaked window).
+        if (_subscribedVm is not null) _subscribedVm.BatchCompleted -= OnBatchCompleted;
         base.OnDataContextChanged(e);
-        if (Vm is { } vm) { vm.BatchCompleted -= OnBatchCompleted; vm.BatchCompleted += OnBatchCompleted; }
+        _subscribedVm = DataContext as MainWindowViewModel;
+        if (_subscribedVm is not null) _subscribedVm.BatchCompleted += OnBatchCompleted;
     }
 
     private void OnBatchCompleted(string summary) => Dispatcher.UIThread.Post(() =>
@@ -78,12 +83,17 @@ public partial class MainWindow : Window
 
     private async void OnReview(object? sender, RoutedEventArgs e)
     {
-        if (Vm is not { } vm || (sender as Control)?.DataContext is not Models.QueueItem item) return;
-        var review = vm.CreateReview(item);
-        var win = new ReviewWindow { DataContext = review };
-        _ = review.LoadAsync(); // analyze in the background; the window shows "Analyzing…"
-        var applied = await win.ShowDialog<bool>(this);
-        if (applied) await vm.ApplyReviewAndCleanAsync(item, review);
+        // async void: an unhandled exception here would crash the app, so guard the whole body.
+        try
+        {
+            if (Vm is not { } vm || (sender as Control)?.DataContext is not Models.QueueItem item) return;
+            var review = vm.CreateReview(item);
+            var win = new ReviewWindow { DataContext = review };
+            _ = review.LoadAsync(); // analyze in the background; the window shows "Analyzing…"
+            var applied = await win.ShowDialog<bool>(this);
+            if (applied) await vm.ApplyReviewAndCleanAsync(item, review);
+        }
+        catch { /* review/clean failure is surfaced on the row; never crash the window */ }
     }
 
     private async void OnBrowse(object? sender, RoutedEventArgs e)
@@ -97,7 +107,7 @@ public partial class MainWindow : Window
                 AllowMultiple = true,
                 FileTypeFilter = new[]
                 {
-                    new FilePickerFileType("Video") { Patterns = new[] { "*.mp4", "*.mov", "*.mkv", "*.m4v", "*.webm" } },
+                    new FilePickerFileType("Video") { Patterns = Crisp.VideoTypes.Extensions.Select(x => "*" + x).ToList() },
                 },
             });
             var paths = files.Select(f => f.TryGetLocalPath()).Where(p => p is not null).Select(p => p!).ToList();

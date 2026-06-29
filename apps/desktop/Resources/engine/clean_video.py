@@ -188,7 +188,14 @@ def main():
         on_progress = lambda f, l="": emit({"event": "progress", "fraction": f, "label": l})
     else:
         def user_log(msg):
-            print(f"→ {msg}" if not msg.startswith(("=", "✅")) else f"\n{msg}", flush=True)
+            line = f"→ {msg}" if not msg.startswith(("=", "✅")) else f"\n{msg}"
+            try:
+                print(line, flush=True)
+            except UnicodeEncodeError:
+                # A legacy Windows console (cp1252) can't encode →/✅ — fall back to ASCII
+                # rather than crash the human-CLI mode. (Picked up from PR #120.)
+                ascii_line = line.replace("→", "->").replace("✅", "[OK]")
+                print(ascii_line.encode("ascii", "replace").decode("ascii"), flush=True)
         on_progress = None
 
     # Tee every human status line into the run log, and record the invocation so a

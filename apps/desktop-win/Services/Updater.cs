@@ -122,9 +122,7 @@ public partial class Updater : ObservableObject
 
     private static async Task<string?> GetAsync(string url)
     {
-        // GithubToken() spawns `gh auth token` with a synchronous 10s bound; run it off the
-        // calling thread so a slow gh can't freeze startup (CheckAsync runs at launch).
-        var token = await Task.Run(GithubToken);
+        var token = await GithubTokenAsync();
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         req.Headers.UserAgent.ParseAdd("Crisp-Windows");
@@ -157,7 +155,7 @@ public partial class Updater : ObservableObject
 
     /// `gh auth token` for the private repo (same as the Mac). Returns null if gh
     /// isn't installed/authed — the check then degrades to anonymous (public releases).
-    private static string? GithubToken()
+    private static async Task<string?> GithubTokenAsync()
     {
         foreach (var gh in new[] { "gh", "/opt/homebrew/bin/gh", "/usr/local/bin/gh" })
         {
@@ -170,13 +168,15 @@ public partial class Updater : ObservableObject
                     UseShellExecute = false,
                 });
                 if (p is null) continue;
-                // Drain both streams async (so a full stderr pipe can't stall the child) and
-                // actually enforce the 10s bound — ReadToEnd() alone ignores WaitForExit's timeout.
+                // Fully async + time-bound: drain both streams (a full stderr pipe can't stall
+                // the child) and bound the wait to 10s without blocking a thread.
                 var stdoutTask = p.StandardOutput.ReadToEndAsync();
                 var stderrTask = p.StandardError.ReadToEndAsync();
-                if (!p.WaitForExit(10_000)) { try { p.Kill(true); } catch { /* ignore */ } continue; }
-                var token = stdoutTask.GetAwaiter().GetResult().Trim();
-                _ = stderrTask.GetAwaiter().GetResult();
+                using var cts = new System.Threading.CancellationTokenSource(10_000);
+                try { await p.WaitForExitAsync(cts.Token); }
+                catch (OperationCanceledException) { try { p.Kill(true); } catch { /* ignore */ } continue; }
+                var token = (await stdoutTask).Trim();
+                _ = await stderrTask;
                 if (p.ExitCode == 0 && token.Length > 0) return token;
             }
             catch { /* try next candidate */ }

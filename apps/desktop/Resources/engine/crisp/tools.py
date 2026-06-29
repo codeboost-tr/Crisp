@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from .errors import CleanError
@@ -18,6 +19,12 @@ def _resolve_tool(env_var: str, candidates: tuple, hint: str) -> str:
     override = os.environ.get(env_var)
     if override and Path(override).exists():
         return override
+    # On Windows, try explicit `.exe` names first so shutil.which can't resolve a
+    # non-executable that happens to share the stem (a bash wrapper, a .CPL) and trip
+    # `WinError 193: %1 is not a valid Win32 application`. (Picked up from a Windows-port
+    # contribution — see PR #120.)
+    if sys.platform == "win32":
+        candidates = tuple(c if c.endswith(".exe") else c + ".exe" for c in candidates) + candidates
     for name in candidates:
         path = shutil.which(name)
         if path:

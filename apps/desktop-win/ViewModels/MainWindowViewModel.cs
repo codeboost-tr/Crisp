@@ -73,13 +73,8 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(CleanAllCommand))]
     private bool _removeRetakes;
 
-    // Accepted video types (mirrors the Mac CleanRunner allow-list) — a dropped
-    // non-video is ignored rather than queued and failed.
-    private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".mp4", ".mov", ".mkv", ".m4v", ".webm", ".avi", ".flv", ".ts",
-        ".mpg", ".mpeg", ".wmv", ".m2ts", ".3gp", ".mts",
-    };
+    // Accepted video types live in the shared VideoTypes.Set (one source of truth for the
+    // queue, watch folder, Explorer verb, and picker).
 
     // A user-supplied model satisfies the gate without any download.
     public bool NeedsModel => (RemoveFillers || RemoveRetakes) && !Settings.HasCustomModel && !Models.IsReady;
@@ -199,7 +194,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         foreach (var p in paths)
             if (File.Exists(p)
-                && VideoExtensions.Contains(Path.GetExtension(p))
+                && VideoTypes.IsVideo(p)
                 && !Queue.Any(q => string.Equals(q.Path, p, StringComparison.OrdinalIgnoreCase)))
                 Queue.Add(new QueueItem(p) { PresetId = Settings.DefaultPresetId });
         EstimateText = ""; // queue changed → any estimate is stale
@@ -237,6 +232,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var waiting = Queue.Where(q => q.Status == QueueStatus.Waiting).ToList();
         if (waiting.Count == 0) return;
 
+        var doneBefore = DoneCount; // so the toast fires only if THIS batch cleaned something
         IsRunning = true;
         RefreshCounts();
         _cts = new CancellationTokenSource();
@@ -269,7 +265,7 @@ public partial class MainWindowViewModel : ViewModelBase
             _cts = null;
             UpdateOverall();
             RefreshCounts();
-            if (DoneCount > 0) BatchCompleted?.Invoke(SummaryText);
+            if (DoneCount > doneBefore) BatchCompleted?.Invoke(SummaryText);
         }
     }
 
@@ -348,6 +344,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task CleanOneAsync(QueueItem item)
     {
         if (IsRunning || item.Status != QueueStatus.Waiting) return;
+        var doneBefore = DoneCount;
         IsRunning = true;
         RefreshCounts();
         _cts = new CancellationTokenSource();
@@ -360,7 +357,7 @@ public partial class MainWindowViewModel : ViewModelBase
             _cts = null;
             UpdateOverall();
             RefreshCounts();
-            if (DoneCount > 0) BatchCompleted?.Invoke(SummaryText);
+            if (DoneCount > doneBefore) BatchCompleted?.Invoke(SummaryText);
         }
     }
 

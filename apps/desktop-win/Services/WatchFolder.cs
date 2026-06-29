@@ -10,11 +10,6 @@ namespace Crisp.Services;
 /// background-when-closed agent is a Windows-service follow-up.
 public sealed class WatchFolder : IDisposable
 {
-    private static readonly HashSet<string> VideoExts = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".mp4", ".mov", ".mkv", ".m4v", ".webm", ".avi", ".flv", ".ts", ".mpg", ".mpeg", ".wmv", ".m2ts",
-    };
-
     private readonly Action<string> _onVideo;
     private readonly HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase); // reported
     private readonly HashSet<string> _pending = new(StringComparer.OrdinalIgnoreCase); // stabilizing
@@ -44,7 +39,7 @@ public sealed class WatchFolder : IDisposable
 
     private async void OnAppeared(string path)
     {
-        if (!VideoExts.Contains(Path.GetExtension(path))) return;
+        if (!VideoTypes.IsVideo(path)) return;
         int gen;
         lock (_seen)
         {
