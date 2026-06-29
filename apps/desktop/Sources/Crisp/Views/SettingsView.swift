@@ -17,6 +17,9 @@ struct SettingsView: View {
     @Bindable var model: CleanModel
 
     @State private var newPresetName = ""
+    /// Force-10-bit confirmation: it upconverts an 8-bit source for no real gain, so the
+    /// picker warns before committing (the user can still proceed for a delivery spec).
+    @State private var confirmForce10 = false
     @State private var snapshot = SystemProbe.snapshot()
     /// Dev sideload: the local model path picked in this build (mirrors
     /// `DevFillerModel.pickedPath`; `@State` so the UI refreshes after picking).
@@ -27,6 +30,21 @@ struct SettingsView: View {
     /// so it stays in one place as containers are added.
     private var isWebM: Bool {
         OutputContainer(rawValue: settings.outputContainer)?.forcesOwnCodecs ?? false
+    }
+
+    /// Color-depth picker binding that intercepts the forced-10-bit choice to confirm
+    /// first (upconverting 8-bit gains nothing); every other choice applies immediately.
+    private var colorDepthBinding: Binding<String> {
+        Binding(
+            get: { settings.colorDepth },
+            set: { newValue in
+                if ColorDepth(rawValue: newValue)?.warnsOnSelect == true {
+                    confirmForce10 = true          // hold the picker; commit only on confirm
+                } else {
+                    settings.colorDepth = newValue
+                }
+            }
+        )
     }
 
     /// The running build, e.g. "0.12" or "0.12 (build 34)" on Nightly.
@@ -173,6 +191,35 @@ struct SettingsView: View {
             }
             Picker("Audio bitrate", selection: $settings.audioBitrateKbps) {
                 ForEach([128, 160, 192, 256], id: \.self) { Text("\($0) kbps").tag($0) }
+            }
+
+            // Color depth — "Automatic" matches the source so 10-bit/HDR footage is never
+            // crushed to 8-bit. Independent of the container (VP9 supports 10-bit too), so
+            // it stays enabled even when WebM disables the codec controls above. But editor
+            // handoff does the final encode in the editor and only ever preserves the source
+            // (no upscale), so the choice has no effect there — disable + explain it then.
+            Picker("Color depth", selection: colorDepthBinding) {
+                ForEach(ColorDepth.allCases) { Text($0.label).tag($0.rawValue) }
+            }
+            .disabled(settings.exportToEditor)
+            .sheet(isPresented: $confirmForce10) {
+                ConfirmationSheet(
+                    icon: "paintpalette",
+                    title: "Force 10-bit output?",
+                    message: "On Automatic, your footage already keeps the right color depth \u{2014} real 10-bit and HDR recordings stay 10-bit.\n\nForcing 10-bit only changes 8-bit footage, where it adds no real quality \u{2014} just larger files and slower, software-only encoding. Choose it only if a delivery spec needs 10-bit.",
+                    confirmTitle: "Force 10-bit",
+                    // Neutral label: canceling keeps whatever depth is currently selected
+                    // (which may be 8-bit, not Automatic), so don't promise "Keep Automatic".
+                    cancelTitle: "Cancel"
+                ) {
+                    settings.colorDepth = ColorDepth.force10.rawValue
+                }
+            }
+            if settings.exportToEditor {
+                Text("Applies only when Crisp renders a video. With \u{201C}Send my cuts to a video editor\u{201D} on, the original\u{2019}s color depth is preserved and your editor handles the final encode.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if let depth = ColorDepth(rawValue: settings.colorDepth) {
+                Text(depth.detail).font(.caption).foregroundStyle(.secondary)
             }
 
             // Frame rate — screen recordings (OBS, macOS capture) are often variable

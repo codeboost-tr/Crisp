@@ -319,6 +319,60 @@ final class CrispTests: XCTestCase {
                        ["auto", "mp4", "mkv", "mov", "m4v", "ts", "webm"])
     }
 
+    func testColorDepthDefaultsToAutoAndCarriesThrough() {
+        // Default is "auto" (match the source so 10-bit/HDR footage is never crushed to
+        // 8-bit); whatever's chosen reaches the engine parameters for every strength.
+        XCTAssertEqual(EngineConfig.defaults.colorDepth, "auto")
+        var cfg = EngineConfig.defaults
+        cfg.colorDepth = "10"
+        for strength in [Strength.gentle, .aggressive, .custom] {
+            XCTAssertEqual(strength.parameters(using: cfg).colorDepth, "10")
+        }
+        // Preset-backed cleans rebuild a throwaway config, so they must carry colorDepth
+        // through too — otherwise a preset saved at "10" would silently render "auto".
+        let preset = Preset(name: "P", strength: .aggressive, config: cfg)
+        XCTAssertEqual(preset.colorDepth, "10")                                  // snapshot kept it
+        XCTAssertEqual(preset.parameters(exportToEditor: false).colorDepth, "10")  // and restores it
+    }
+
+    func testPresetColorDepthForwardCompatDecodesMissingKey() throws {
+        // A preset saved before colorDepth existed must still decode (defaulting to "auto"),
+        // not throw — a throwing element would fail the whole EngineConfig.presets decode and
+        // wipe the user's settings (load() falls back to defaults on any decode error).
+        let json = Data("""
+        { "id": "00000000-0000-0000-0000-000000000000", "name": "Legacy", "strength": "balanced",
+          "pauseThreshold": 0.4, "silenceFloorDB": -30, "breathingRoom": 0.1, "minKeep": 0.05,
+          "videoCodec": "hevc", "hardwareEncoding": true, "videoQuality": "high",
+          "audioCodec": "aac", "audioBitrateKbps": 192, "outputContainer": "auto",
+          "outputDirectory": "", "backupOriginal": true }
+        """.utf8)
+        let preset = try JSONDecoder().decode(Preset.self, from: json)
+        XCTAssertEqual(preset.colorDepth, "auto")           // missing key → default, no throw
+        // And it round-trips through a config (presets array) without losing the field.
+        var cfg = EngineConfig.defaults
+        cfg.presets = [preset]
+        let round = try JSONDecoder().decode(EngineConfig.self, from: JSONEncoder().encode(cfg))
+        XCTAssertEqual(round.presets.first?.colorDepth, "auto")
+    }
+
+    func testColorDepthRawValuesMatchEngineFlag() {
+        // The enum rawValues must be exactly the strings the engine's --color-depth flag
+        // accepts, since the picker tags feed straight into the CLI.
+        XCTAssertEqual(ColorDepth.allCases.map(\.rawValue), ["auto", "8", "10"])
+        // Only the forced-10-bit choice warns before committing (it upconverts 8-bit).
+        XCTAssertTrue(ColorDepth.force10.warnsOnSelect)
+        XCTAssertFalse(ColorDepth.auto.warnsOnSelect)
+        XCTAssertFalse(ColorDepth.force8.warnsOnSelect)
+    }
+
+    func testColorDepthCorruptValueClampsToAuto() {
+        // A hand-edited/unknown value must clamp to "auto" so the engine never gets a
+        // bogus --color-depth (which has fixed choices and would hard-fail the clean).
+        var cfg = EngineConfig.defaults
+        cfg.colorDepth = "garbage"
+        XCTAssertEqual(Strength.aggressive.parameters(using: cfg).colorDepth, "auto")
+    }
+
     func testBackupOriginalDefaultsOnAndCarriesThrough() {
         // Backing up the original is on by default (the safety net), and the choice
         // reaches the engine parameters for every strength.
@@ -355,6 +409,7 @@ final class CrispTests: XCTestCase {
         XCTAssertEqual(cfg.audioCodec, EngineConfig.defaults.audioCodec)  // new key → default
         XCTAssertEqual(cfg.audioBitrateKbps, EngineConfig.defaults.audioBitrateKbps)
         XCTAssertEqual(cfg.outputContainer, EngineConfig.defaults.outputContainer)  // new key → default
+        XCTAssertEqual(cfg.colorDepth, EngineConfig.defaults.colorDepth)  // new key → default
         XCTAssertEqual(cfg.backupOriginal, EngineConfig.defaults.backupOriginal)  // new key → default
 
         // An empty object decodes to all defaults (not a failure).
@@ -409,11 +464,28 @@ final class CrispTests: XCTestCase {
         XCTAssertEqual(args[1], "/v/in.mp4")
         XCTAssertTrue(args.contains("--ndjson"))
         XCTAssertTrue(args.contains("--hardware"))                 // defaults enable HW
+        XCTAssertEqual(valueAfter("--color-depth", in: args), "auto")  // source-aware by default
         XCTAssertEqual(valueAfter("--model", in: args), "/models/ggml.bin")
         XCTAssertEqual(valueAfter("--backup-dir", in: args), "/tmp/orig")
         XCTAssertFalse(args.contains("--no-fillers"))
         XCTAssertFalse(args.contains("--no-backup"))
         XCTAssertEqual(valueAfter("--pause", in: args), String(Strength.aggressive.pause))
+    }
+
+    func testCleanRunnerThreadsNonDefaultColorDepth() {
+        // A hardcoded "auto" in arguments(…) would pass the default-path test above, so
+        // prove a non-default value is actually threaded from parameters.colorDepth.
+        var cfg = EngineConfig.defaults
+        cfg.colorDepth = "10"
+        let params = Strength.aggressive.parameters(using: cfg)
+        let args = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                         input: URL(fileURLWithPath: "/v/in.mp4"),
+                                         parameters: params,
+                                         options: CleanRunner.Options(modelPath: nil,
+                                                                      removeFillers: false,
+                                                                      removeRetakes: false,
+                                                                      backupDirectory: nil))
+        XCTAssertEqual(valueAfter("--color-depth", in: args), "10")
     }
 
     func testCleanRunnerArgumentsForPausesOnlyNoBackup() {

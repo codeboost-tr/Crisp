@@ -235,3 +235,26 @@ Native, Apple-like. SF Symbols, `.regularMaterial`/`.quaternary` cards (radius
 ## License & credit
 
 GPL-3.0 (`LICENSE` at root). Credited to Syntax Lab Technology / Abdul Rafay.
+
+
+## Code Review
+
+Every PR is reviewed by three automated agents:
+
+1. **Cubic AI**
+2. **CodeRabbit**
+3. **Scarlet** (code review)
+
+They run on each push to an open PR (and again when it's marked **Ready for review**) —
+usually automatically, occasionally needing a manual re-trigger. After every commit, watch
+for their feedback: read each finding, judge which are valid, fix the real ones, and commit
+so the next round re-reviews. Keep iterating until the automated reviews come back clean.
+
+Then do your own pass: confirm the change is solid and production-ready — no dead code, no
+needless complexity, everything on point.
+
+## PR making
+
+Keep PRs simple: a clear title is enough — skip the long summary, since the automated
+reviewers add their own AI summary, which is better.
+- Keep commit messages concise and to the point, following industry-standard commit conventions.
