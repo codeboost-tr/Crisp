@@ -16,7 +16,7 @@ struct OnboardingView: View {
     @State private var index = 0
 
     private enum Step: CaseIterable {
-        case welcome, capabilities, howItWorks, fillers, preferences, automate, done
+        case welcome, capabilities, fidelity, howItWorks, fillers, preferences, automate, done
     }
 
     private var steps: [Step] { Step.allCases }
@@ -83,6 +83,24 @@ struct OnboardingView: View {
                        "Flub a line and immediately say it again? Crisp keeps the corrected take and cuts the flubbed one — the tedious edit you’d normally do by hand. Needs the Whisper speech model.",
                        badge: "New")
 
+        case .fidelity:
+            header(symbol: "dial.high.fill", title: "What Crisp preserves",
+                   subtitle: "Cutting is only half the job. Crisp protects what makes your footage look right — automatically, and never downgrades it.")
+            featureRow("speedometer", "Stays perfectly in sync",
+                       "Screen recordings often vary their frame rate, which can drift audio out of sync after cutting. Crisp detects that and re-times them to a steady rate — ordinary footage is left exactly as it is.",
+                       badge: "New")
+            featureRow("paintpalette.fill", "Keeps your color and HDR",
+                       "10-bit and HDR recordings stay 10-bit and HDR — Crisp matches your source’s color depth instead of silently flattening it to a washed-out copy.",
+                       badge: "New")
+            featureRow("shippingbox.fill", "Your format, your call",
+                       "Export an MP4 with H.264 or HEVC, or a web-friendly WebM, and choose the audio quality and hardware encoding — Crisp keeps incompatible combinations from happening.")
+            featureRow("film.stack", "Or hand the cuts to your editor",
+                       "Prefer to finish in your own editor? Crisp can pass the cuts to DaVinci Resolve as a ready-to-edit timeline — no finished video to render, and every cut stays adjustable. Turn it on in the “Make it automatic” step.")
+            Text("It all happens automatically on smart defaults — fine-tune any of it later in Settings (⌘,).")
+                .font(.callout).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
         case .howItWorks:
             header(symbol: "wand.and.stars", title: "Clean your videos in seconds",
                    subtitle: "Add as many as you like — Crisp cleans them as a queue.")
@@ -115,6 +133,7 @@ struct OnboardingView: View {
                        "Right-click any video → Services → Clean with Crisp.")
             featureRow("square.stack.3d.up.fill", "Shortcuts",
                        "Add the “Clean with Crisp” action to any Shortcut or automation.")
+            editorHandoffSetup
             menuBarSetup
             watchSetup
 
@@ -191,6 +210,35 @@ struct OnboardingView: View {
         if let path = FolderPicker.choosePath(message: "Choose where cleaned videos are saved (e.g. a NAS).") {
             settings.outputDirectory = path
         }
+    }
+
+    // MARK: - Configuration: editor handoff
+
+    @ViewBuilder private var editorHandoffSetup: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "film.stack").font(.title3).foregroundStyle(.tint)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Send to a video editor").font(.headline)
+                    Text("Prefer to finish in your own editor? Crisp finds the cuts and hands them over as a ready-to-edit timeline — no rendering, so it’s done in seconds. You polish in the editor.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            if let editor = EditorDetector.resolve() {
+                Toggle("Send my cuts to \(editor.name)", isOn: $settings.exportToEditor)
+                    .toggleStyle(.switch)
+            } else {
+                Text("Install DaVinci Resolve (the free version works great) and Crisp can send your cuts straight to it.")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardBackground(.tint.opacity(0.08))
     }
 
     // MARK: - Configuration: menu bar

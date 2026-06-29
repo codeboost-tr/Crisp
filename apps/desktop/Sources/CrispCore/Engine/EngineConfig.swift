@@ -27,6 +27,21 @@ public struct EngineConfig: Codable, Equatable, Sendable {
     public var audioCodec: String        // "aac" | "opus"
     public var audioBitrateKbps: Int
     public var outputContainer: String   // "auto" | "mp4" | "mkv" | "mov" | "m4v" | "ts" | "webm"
+    // Output bit depth — "auto" matches the source (a 10-bit/HDR/wide-chroma recording is
+    // preserved, 8-bit stays 8-bit, so footage is never silently downgraded); "8"/"10"
+    // force it. (See ColorDepth + crisp/encode.py resolve_pix_fmt.)
+    public var colorDepth: String        // "auto" | "8" | "10"
+    // Frame-rate handling — screen recorders emit variable-frame-rate video that the
+    // cut render can drift A/V on. "auto" normalizes a detected VFR source to a
+    // constant rate; "passthrough" keeps source timing; "constant" forces
+    // `frameRateValue`. (See FrameRateMode + crisp/framerate.py.)
+    public var frameRateMode: String     // "auto" | "passthrough" | "constant"
+    public var frameRateValue: Double    // fps used when mode == "constant"
+    // Editor handoff — when on, a clean writes a non-destructive editor project (a copy
+    // of the original + an .fcpxml timeline DaVinci Resolve can import) instead of
+    // rendering a cleaned video. Zero re-encode for CFR sources. (See EditorDetector +
+    // crisp/timeline.py.) Off by default: the default output stays a finished video.
+    public var exportToEditor: Bool
     // Output location — folder to write the cleaned file into ("" ⇒ beside the
     // source, the default). Lets users send cleaned files to e.g. a NAS.
     public var outputDirectory: String
@@ -83,7 +98,11 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         pauseThreshold: 0.35, silenceFloorDB: -30, breathingRoom: 0.10, minKeep: 0.05,
         fadeMs: 10, crossfadeMs: 0, snapMs: 12,
         videoCodec: "hevc", hardwareEncoding: true, videoQuality: "high",
-        audioCodec: "aac", audioBitrateKbps: 192, outputContainer: "auto", outputDirectory: "",
+        audioCodec: "aac", audioBitrateKbps: 192, outputContainer: "auto",
+        colorDepth: "auto",
+        frameRateMode: "auto", frameRateValue: 30,
+        exportToEditor: false,
+        outputDirectory: "",
         splitTracks: false, splitAudioFormat: "match",
         captionsFormat: "none",
         // Aggressive by default — validated on real footage to catch natural
@@ -101,7 +120,8 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         case version, pauseThreshold, silenceFloorDB, breathingRoom, minKeep
         case fadeMs, crossfadeMs, snapMs
         case videoCodec, hardwareEncoding, videoQuality, audioCodec, audioBitrateKbps
-        case outputContainer, outputDirectory, splitTracks, splitAudioFormat, captionsFormat
+        case outputContainer, colorDepth, frameRateMode, frameRateValue, exportToEditor
+        case outputDirectory, splitTracks, splitAudioFormat, captionsFormat
         case retakeSensitivity, backupOriginal
         case watchEnabled, watchFolderPath, watchRemoveFillers
         case presets, defaultPresetID
@@ -113,7 +133,11 @@ public struct EngineConfig: Codable, Equatable, Sendable {
     public init(version: Int, pauseThreshold: Double, silenceFloorDB: Double, breathingRoom: Double,
                 minKeep: Double, fadeMs: Double = 10, crossfadeMs: Double = 0, snapMs: Double = 12,
                 videoCodec: String, hardwareEncoding: Bool, videoQuality: String,
-                audioCodec: String, audioBitrateKbps: Int, outputContainer: String, outputDirectory: String,
+                audioCodec: String, audioBitrateKbps: Int, outputContainer: String,
+                colorDepth: String = "auto",
+                frameRateMode: String = "auto", frameRateValue: Double = 30,
+                exportToEditor: Bool = false,
+                outputDirectory: String,
                 splitTracks: Bool, splitAudioFormat: String, captionsFormat: String = "none",
                 retakeSensitivity: String = "aggressive",
                 backupOriginal: Bool,
@@ -138,6 +162,10 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         self.audioCodec = audioCodec
         self.audioBitrateKbps = audioBitrateKbps
         self.outputContainer = outputContainer
+        self.colorDepth = colorDepth
+        self.frameRateMode = frameRateMode
+        self.frameRateValue = frameRateValue
+        self.exportToEditor = exportToEditor
         self.outputDirectory = outputDirectory
         self.splitTracks = splitTracks
         self.splitAudioFormat = splitAudioFormat
@@ -176,6 +204,10 @@ public struct EngineConfig: Codable, Equatable, Sendable {
         audioCodec         = try c.decodeIfPresent(String.self, forKey: .audioCodec) ?? d.audioCodec
         audioBitrateKbps   = try c.decodeIfPresent(Int.self, forKey: .audioBitrateKbps) ?? d.audioBitrateKbps
         outputContainer    = try c.decodeIfPresent(String.self, forKey: .outputContainer) ?? d.outputContainer
+        colorDepth         = try c.decodeIfPresent(String.self, forKey: .colorDepth) ?? d.colorDepth
+        frameRateMode      = try c.decodeIfPresent(String.self, forKey: .frameRateMode) ?? d.frameRateMode
+        frameRateValue     = try c.decodeIfPresent(Double.self, forKey: .frameRateValue) ?? d.frameRateValue
+        exportToEditor     = try c.decodeIfPresent(Bool.self, forKey: .exportToEditor) ?? d.exportToEditor
         outputDirectory    = try c.decodeIfPresent(String.self, forKey: .outputDirectory) ?? d.outputDirectory
         splitTracks        = try c.decodeIfPresent(Bool.self, forKey: .splitTracks) ?? d.splitTracks
         splitAudioFormat   = try c.decodeIfPresent(String.self, forKey: .splitAudioFormat) ?? d.splitAudioFormat

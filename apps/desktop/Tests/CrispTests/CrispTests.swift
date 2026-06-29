@@ -319,6 +319,60 @@ final class CrispTests: XCTestCase {
                        ["auto", "mp4", "mkv", "mov", "m4v", "ts", "webm"])
     }
 
+    func testColorDepthDefaultsToAutoAndCarriesThrough() {
+        // Default is "auto" (match the source so 10-bit/HDR footage is never crushed to
+        // 8-bit); whatever's chosen reaches the engine parameters for every strength.
+        XCTAssertEqual(EngineConfig.defaults.colorDepth, "auto")
+        var cfg = EngineConfig.defaults
+        cfg.colorDepth = "10"
+        for strength in [Strength.gentle, .aggressive, .custom] {
+            XCTAssertEqual(strength.parameters(using: cfg).colorDepth, "10")
+        }
+        // Preset-backed cleans rebuild a throwaway config, so they must carry colorDepth
+        // through too — otherwise a preset saved at "10" would silently render "auto".
+        let preset = Preset(name: "P", strength: .aggressive, config: cfg)
+        XCTAssertEqual(preset.colorDepth, "10")                                  // snapshot kept it
+        XCTAssertEqual(preset.parameters(exportToEditor: false).colorDepth, "10")  // and restores it
+    }
+
+    func testPresetColorDepthForwardCompatDecodesMissingKey() throws {
+        // A preset saved before colorDepth existed must still decode (defaulting to "auto"),
+        // not throw — a throwing element would fail the whole EngineConfig.presets decode and
+        // wipe the user's settings (load() falls back to defaults on any decode error).
+        let json = Data("""
+        { "id": "00000000-0000-0000-0000-000000000000", "name": "Legacy", "strength": "balanced",
+          "pauseThreshold": 0.4, "silenceFloorDB": -30, "breathingRoom": 0.1, "minKeep": 0.05,
+          "videoCodec": "hevc", "hardwareEncoding": true, "videoQuality": "high",
+          "audioCodec": "aac", "audioBitrateKbps": 192, "outputContainer": "auto",
+          "outputDirectory": "", "backupOriginal": true }
+        """.utf8)
+        let preset = try JSONDecoder().decode(Preset.self, from: json)
+        XCTAssertEqual(preset.colorDepth, "auto")           // missing key → default, no throw
+        // And it round-trips through a config (presets array) without losing the field.
+        var cfg = EngineConfig.defaults
+        cfg.presets = [preset]
+        let round = try JSONDecoder().decode(EngineConfig.self, from: JSONEncoder().encode(cfg))
+        XCTAssertEqual(round.presets.first?.colorDepth, "auto")
+    }
+
+    func testColorDepthRawValuesMatchEngineFlag() {
+        // The enum rawValues must be exactly the strings the engine's --color-depth flag
+        // accepts, since the picker tags feed straight into the CLI.
+        XCTAssertEqual(ColorDepth.allCases.map(\.rawValue), ["auto", "8", "10"])
+        // Only the forced-10-bit choice warns before committing (it upconverts 8-bit).
+        XCTAssertTrue(ColorDepth.force10.warnsOnSelect)
+        XCTAssertFalse(ColorDepth.auto.warnsOnSelect)
+        XCTAssertFalse(ColorDepth.force8.warnsOnSelect)
+    }
+
+    func testColorDepthCorruptValueClampsToAuto() {
+        // A hand-edited/unknown value must clamp to "auto" so the engine never gets a
+        // bogus --color-depth (which has fixed choices and would hard-fail the clean).
+        var cfg = EngineConfig.defaults
+        cfg.colorDepth = "garbage"
+        XCTAssertEqual(Strength.aggressive.parameters(using: cfg).colorDepth, "auto")
+    }
+
     func testBackupOriginalDefaultsOnAndCarriesThrough() {
         // Backing up the original is on by default (the safety net), and the choice
         // reaches the engine parameters for every strength.
@@ -355,6 +409,7 @@ final class CrispTests: XCTestCase {
         XCTAssertEqual(cfg.audioCodec, EngineConfig.defaults.audioCodec)  // new key → default
         XCTAssertEqual(cfg.audioBitrateKbps, EngineConfig.defaults.audioBitrateKbps)
         XCTAssertEqual(cfg.outputContainer, EngineConfig.defaults.outputContainer)  // new key → default
+        XCTAssertEqual(cfg.colorDepth, EngineConfig.defaults.colorDepth)  // new key → default
         XCTAssertEqual(cfg.backupOriginal, EngineConfig.defaults.backupOriginal)  // new key → default
 
         // An empty object decodes to all defaults (not a failure).
@@ -409,11 +464,28 @@ final class CrispTests: XCTestCase {
         XCTAssertEqual(args[1], "/v/in.mp4")
         XCTAssertTrue(args.contains("--ndjson"))
         XCTAssertTrue(args.contains("--hardware"))                 // defaults enable HW
+        XCTAssertEqual(valueAfter("--color-depth", in: args), "auto")  // source-aware by default
         XCTAssertEqual(valueAfter("--model", in: args), "/models/ggml.bin")
         XCTAssertEqual(valueAfter("--backup-dir", in: args), "/tmp/orig")
         XCTAssertFalse(args.contains("--no-fillers"))
         XCTAssertFalse(args.contains("--no-backup"))
         XCTAssertEqual(valueAfter("--pause", in: args), String(Strength.aggressive.pause))
+    }
+
+    func testCleanRunnerThreadsNonDefaultColorDepth() {
+        // A hardcoded "auto" in arguments(…) would pass the default-path test above, so
+        // prove a non-default value is actually threaded from parameters.colorDepth.
+        var cfg = EngineConfig.defaults
+        cfg.colorDepth = "10"
+        let params = Strength.aggressive.parameters(using: cfg)
+        let args = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                         input: URL(fileURLWithPath: "/v/in.mp4"),
+                                         parameters: params,
+                                         options: CleanRunner.Options(modelPath: nil,
+                                                                      removeFillers: false,
+                                                                      removeRetakes: false,
+                                                                      backupDirectory: nil))
+        XCTAssertEqual(valueAfter("--color-depth", in: args), "10")
     }
 
     func testCleanRunnerArgumentsForPausesOnlyNoBackup() {
@@ -430,6 +502,130 @@ final class CrispTests: XCTestCase {
         XCTAssertTrue(args.contains("--no-backup"))                // no backup dir
         XCTAssertFalse(args.contains("--backup-dir"))
         XCTAssertFalse(args.contains("--out-dir"))                 // default ⇒ beside source
+    }
+
+    func testCleanRunnerEmitsFrameRateModeAutoByDefault() {
+        let params = Strength.balanced.parameters(using: .defaults)
+        let opts = CleanRunner.Options(modelPath: nil, removeFillers: false, removeRetakes: false)
+        let args = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                         input: URL(fileURLWithPath: "/v/in.mp4"),
+                                         parameters: params, options: opts)
+        XCTAssertEqual(valueAfter("--fps-mode", in: args), "auto")
+        XCTAssertFalse(args.contains("--fps"))                     // auto lets the engine pick
+    }
+
+    func testCleanRunnerEmitsConstantFrameRate() {
+        var cfg = EngineConfig.defaults
+        cfg.frameRateMode = "constant"
+        cfg.frameRateValue = 60
+        let params = Strength.balanced.parameters(using: cfg)
+        let opts = CleanRunner.Options(modelPath: nil, removeFillers: false, removeRetakes: false)
+        let args = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                         input: URL(fileURLWithPath: "/v/in.mp4"),
+                                         parameters: params, options: opts)
+        XCTAssertEqual(valueAfter("--fps-mode", in: args), "constant")
+        XCTAssertEqual(valueAfter("--fps", in: args), String(60.0))
+    }
+
+    func testEditorDetectorPicksInstalledByID() {
+        // Lite installed, direct/AppStore absent → matches Lite, names it Resolve.
+        let installed = ["com.blackmagic-design.DaVinciResolveLite":
+                            URL(fileURLWithPath: "/Applications/DaVinci Resolve.app")]
+        let editor = EditorDetector.firstInstalled(
+            name: "DaVinci Resolve", ids: EditorDetector.resolveBundleIDs) { installed[$0] }
+        XCTAssertEqual(editor?.id, "com.blackmagic-design.DaVinciResolveLite")
+        XCTAssertEqual(editor?.name, "DaVinci Resolve")
+    }
+
+    func testEditorDetectorPrefersEarlierID() {
+        // The direct-download id is listed first, so it wins when several are present.
+        let all = ["com.blackmagic-design.DaVinciResolve": URL(fileURLWithPath: "/A.app"),
+                   "com.blackmagic-design.DaVinciResolveLite": URL(fileURLWithPath: "/B.app")]
+        let editor = EditorDetector.firstInstalled(
+            name: "R", ids: EditorDetector.resolveBundleIDs) { all[$0] }
+        XCTAssertEqual(editor?.id, "com.blackmagic-design.DaVinciResolve")
+    }
+
+    func testEditorDetectorNilWhenNoneInstalled() {
+        XCTAssertNil(EditorDetector.firstInstalled(name: "X", ids: ["a", "b"]) { _ in nil })
+    }
+
+    // The open/reveal policy is pure so the picker, row button, and context menu can all
+    // share it. An editor export surfaces its .fcpxml; anything else has nothing to reveal.
+    func testTimelineFileOnlyForEditorExport() {
+        let export = CleanResult(output: "/v/clip (Crisp)/clip.fcpxml", origSeconds: 0, newSeconds: 0,
+                                 savedSeconds: 0, pauses: 0, fillers: 0,
+                                 exportTimeline: "fcpxml", projectDir: "/v/clip (Crisp)")
+        XCTAssertEqual(EditorDetector.timelineFile(for: export)?.path, "/v/clip (Crisp)/clip.fcpxml")
+
+        let rendered = CleanResult(output: "/v/clip_cleaned.mp4", origSeconds: 0, newSeconds: 0,
+                                   savedSeconds: 0, pauses: 0, fillers: 0)   // exportTimeline defaults "none"
+        XCTAssertNil(EditorDetector.timelineFile(for: rendered),
+                     "a normal rendered clean has no timeline to reveal")
+        XCTAssertNil(EditorDetector.timelineFile(for: nil))
+    }
+
+    func testProjectFolderFallsBackToTimelineLocation() {
+        let withDir = CleanResult(output: "/v/c (Crisp)/c.fcpxml", origSeconds: 0, newSeconds: 0,
+                                  savedSeconds: 0, pauses: 0, fillers: 0,
+                                  exportTimeline: "fcpxml", projectDir: "/v/c (Crisp)")
+        XCTAssertEqual(EditorDetector.projectFolder(for: withDir)?.path, "/v/c (Crisp)")
+
+        // No projectDir recorded → fall back to the .fcpxml path so reveal still lands.
+        let noDir = CleanResult(output: "/v/c (Crisp)/c.fcpxml", origSeconds: 0, newSeconds: 0,
+                                savedSeconds: 0, pauses: 0, fillers: 0, exportTimeline: "fcpxml")
+        XCTAssertEqual(EditorDetector.projectFolder(for: noDir)?.path, "/v/c (Crisp)/c.fcpxml")
+        XCTAssertNil(EditorDetector.projectFolder(for: nil))
+
+        // Editor-only contract: a normal rendered clean must NOT yield a project folder
+        // (else revealProject would reveal the rendered video).
+        let rendered = CleanResult(output: "/v/c_cleaned.mp4", origSeconds: 0, newSeconds: 0,
+                                   savedSeconds: 0, pauses: 0, fillers: 0, projectDir: "/should/not/use")
+        XCTAssertNil(EditorDetector.projectFolder(for: rendered))
+    }
+
+    func testCleanRunnerEmitsExportTimelineWhenEditorOn() {
+        var cfg = EngineConfig.defaults
+        cfg.exportToEditor = true
+        let params = Strength.balanced.parameters(using: cfg)
+        XCTAssertEqual(params.exportTimeline, "fcpxml")
+        let args = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                         input: URL(fileURLWithPath: "/v/in.mp4"),
+                                         parameters: params,
+                                         options: CleanRunner.Options(modelPath: nil,
+                                                                      removeFillers: false,
+                                                                      removeRetakes: false))
+        XCTAssertEqual(valueAfter("--export-timeline", in: args), "fcpxml")
+    }
+
+    func testCleanRunnerEmitsExportTimelineNoneByDefault() {
+        let params = Strength.balanced.parameters(using: .defaults)
+        XCTAssertEqual(params.exportTimeline, "none")
+        let args = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                         input: URL(fileURLWithPath: "/v/in.mp4"),
+                                         parameters: params,
+                                         options: CleanRunner.Options(modelPath: nil,
+                                                                      removeFillers: false,
+                                                                      removeRetakes: false))
+        // Passed explicitly as "none" so the Swift config — not the script default
+        // — decides; clean_video.py accepts "none" as a valid --export-timeline value.
+        XCTAssertEqual(valueAfter("--export-timeline", in: args), "none")
+    }
+
+    func testExportToEditorConfigDefaultsOffAndForwardCompat() throws {
+        XCTAssertFalse(EngineConfig.defaults.exportToEditor)
+        let legacy = Data(#"{ "version": 2 }"#.utf8)
+        XCTAssertFalse(try JSONDecoder().decode(EngineConfig.self, from: legacy).exportToEditor)
+    }
+
+    func testFrameRateConfigDefaultsAndForwardCompat() throws {
+        XCTAssertEqual(EngineConfig.defaults.frameRateMode, "auto")
+        XCTAssertEqual(EngineConfig.defaults.frameRateValue, 30)
+        // A file predating the frame-rate keys fills them with defaults (forward-compat).
+        let legacy = Data(#"{ "version": 2 }"#.utf8)
+        let decoded = try JSONDecoder().decode(EngineConfig.self, from: legacy)
+        XCTAssertEqual(decoded.frameRateMode, "auto")
+        XCTAssertEqual(decoded.frameRateValue, 30)
     }
 
     func testRetakeRemovalFlagMapping() {
@@ -693,9 +889,18 @@ final class CrispTests: XCTestCase {
         cfg.outputDirectory = "/Volumes/NAS"; cfg.backupOriginal = false
         for strength in [Strength.gentle, .aggressive, .custom] {
             let preset = Preset(name: "P", strength: strength, config: cfg)
-            XCTAssertEqual(preset.parameters(), strength.parameters(using: cfg),
+            XCTAssertEqual(preset.parameters(exportToEditor: cfg.exportToEditor),
+                           strength.parameters(using: cfg),
                            "\(strength.rawValue) preset should match the global path")
         }
+    }
+
+    func testPresetHonorsEditorHandoff() {
+        // The global editor-handoff mode must apply to preset-backed rows too (else they
+        // silently render while "Send to editor" is on).
+        let preset = Preset(name: "P", strength: .balanced, config: .defaults)
+        XCTAssertEqual(preset.parameters(exportToEditor: true).exportTimeline, "fcpxml")
+        XCTAssertEqual(preset.parameters(exportToEditor: false).exportTimeline, "none")
     }
 
     func testPresetRoundTripsThroughConfig() throws {

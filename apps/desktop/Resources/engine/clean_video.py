@@ -46,10 +46,11 @@ def _enable_group_cancel():
 
 from crisp import CleanError, clean_video
 from crisp.config import (
-    DEFAULT_AUDIO_BITRATE, DEFAULT_AUDIO_CODEC, DEFAULT_CONTAINER, DEFAULT_CROSSFADE_MS,
-    DEFAULT_FADE_MS, DEFAULT_FILLER_BACKEND, DEFAULT_KEEP_PAUSE, DEFAULT_MAX_PAUSE, DEFAULT_MODEL,
-    DEFAULT_NOISE_DB, DEFAULT_QUALITY, DEFAULT_RETAKE_SENSITIVITY, DEFAULT_SNAP_MS, DEFAULT_VIDEO_CODEC,
-    MIN_KEEP, RETAKE_SENSITIVITY_MIN_RUN,
+    DEFAULT_AUDIO_BITRATE, DEFAULT_AUDIO_CODEC, DEFAULT_COLOR_DEPTH, DEFAULT_CONTAINER,
+    DEFAULT_CROSSFADE_MS, DEFAULT_EXPORT_TIMELINE, DEFAULT_FADE_MS, DEFAULT_FILLER_BACKEND, DEFAULT_FPS,
+    DEFAULT_FPS_MODE, DEFAULT_KEEP_PAUSE, DEFAULT_MAX_PAUSE, DEFAULT_MODEL, DEFAULT_NOISE_DB,
+    DEFAULT_QUALITY, DEFAULT_RETAKE_SENSITIVITY, DEFAULT_SNAP_MS, DEFAULT_VIDEO_CODEC, MIN_KEEP,
+    RETAKE_SENSITIVITY_MIN_RUN,
 )
 from crisp.encode import SUPPORTED_CONTAINERS
 from crisp.enginelog import logger_from_env
@@ -90,6 +91,29 @@ def main():
                    default=DEFAULT_CONTAINER,
                    help=f"output container; 'auto' matches the input, 'webm' uses VP9+Opus "
                         f"(default {DEFAULT_CONTAINER})")
+    p.add_argument("--color-depth", choices=["auto", "8", "10"], default=DEFAULT_COLOR_DEPTH,
+                   help=f"output bit depth: 'auto' matches the source (never downgrades "
+                        f"10-bit/HDR footage), '8' forces 8-bit 4:2:0, '10' forces a 10-bit "
+                        f"encode (default {DEFAULT_COLOR_DEPTH})")
+    p.add_argument("--fps-mode", choices=["auto", "passthrough", "constant"], default=DEFAULT_FPS_MODE,
+                   help="frame-rate handling: 'auto' normalizes a variable-frame-rate "
+                        "(VFR) source — e.g. a screen recording — to a constant rate so "
+                        "A/V stays in sync; 'passthrough' keeps the source timing; "
+                        "'constant' always forces --fps "
+                        f"(default {DEFAULT_FPS_MODE})")
+    p.add_argument("--fps", type=float, default=DEFAULT_FPS,
+                   help="target constant frame rate for --fps-mode=constant (e.g. 30, 60) "
+                        "— required in that mode (0 is unset and errors). 'auto' ignores "
+                        "this and uses the source's own rate")
+    p.add_argument("--export-timeline", choices=["none", "fcpxml"], default=DEFAULT_EXPORT_TIMELINE,
+                   help="instead of rendering a video, write a non-destructive editor "
+                        "project: a copy of the original (CFR sources copied as-is; "
+                        "variable-frame-rate sources conformed to CFR) + an .fcpxml timeline "
+                        "that DaVinci Resolve opens to finish the cut. No final render "
+                        f"(default {DEFAULT_EXPORT_TIMELINE})")
+    p.add_argument("--project-dir", default=None,
+                   help="folder to write the editor project into when --export-timeline "
+                        "is set (default: a '<name> (Crisp)' folder beside the input)")
     p.add_argument("--no-fillers", action="store_true", help="only remove pauses, keep um/uh")
     p.add_argument("--no-retakes", action="store_true",
                    help="don't remove repeated takes (a flubbed phrase you immediately "
@@ -207,7 +231,8 @@ def main():
                              noise=args.noise, keep_pause=args.keep_pause, min_keep=args.min_keep,
                              video_codec=args.video_codec, hardware=args.hardware, quality=args.quality,
                              audio_codec=args.audio_codec, audio_bitrate=args.audio_bitrate,
-                             container=args.container, remove_fillers=not args.no_fillers,
+                             container=args.container, color_depth=args.color_depth,
+                             remove_fillers=not args.no_fillers,
                              remove_retakes=not args.no_retakes,
                              retake_sensitivity=args.retake_sensitivity,
                              backup=not args.no_backup, backup_dir=args.backup_dir,
@@ -216,6 +241,8 @@ def main():
                              keep_file=args.keep_file, captions=args.captions,
                              filler_backend=args.filler_backend, filler_model=args.filler_model,
                              fade_ms=args.fade_ms, crossfade_ms=args.crossfade_ms, snap_ms=args.snap_ms,
+                             fps_mode=args.fps_mode, fps=args.fps,
+                             export_timeline=args.export_timeline, project_dir=args.project_dir,
                              on_log=on_log, on_progress=on_progress, logger=log)
         if args.ndjson:
             emit({"event": "result", **result})

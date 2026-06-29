@@ -62,6 +62,24 @@ DEFAULT_QUALITY = "high"      # maximum | high | balanced | smaller
 DEFAULT_AUDIO_CODEC = "aac"   # aac | opus
 DEFAULT_AUDIO_BITRATE = 192   # kbps
 DEFAULT_CONTAINER = "auto"    # auto (match input) | mp4 | mkv | mov | m4v | ts | webm
+# Bit depth (color depth) of the rendered output (see crisp.encode.resolve_pix_fmt).
+# "auto" matches the source — a 10-bit / wide-chroma source is preserved, an 8-bit
+# source stays 8-bit — so footage is never silently downgraded (philosophy #3).
+# "8" forces 8-bit 4:2:0; "10" forces a 10-bit encode (upconverts an 8-bit source).
+DEFAULT_COLOR_DEPTH = "auto"  # auto (match source) | 8 | 10
+
+# Frame-rate handling (see crisp.framerate + render). Screen recorders emit
+# variable-frame-rate (VFR) video, which the trim→concat render can drift A/V on.
+# "auto" normalizes a detected VFR source to a constant rate (its nominal base);
+# "passthrough" never touches timing; "constant" always forces DEFAULT_FPS.
+DEFAULT_FPS_MODE = "auto"     # auto | passthrough | constant
+DEFAULT_FPS = 0               # fps for mode=constant; 0 is unset → constant errors. "auto" ignores it (uses the source's own rate)
+
+# Editor handoff (see crisp.timeline). "none" renders a cleaned video as usual;
+# "fcpxml" instead writes ONLY a non-destructive editor project (no render, no
+# encode) — a copy of the original + an .fcpxml referencing the kept ranges that a
+# video editor (DaVinci Resolve) opens to finish the cut. Zero re-encode for CFR.
+DEFAULT_EXPORT_TIMELINE = "none"   # none | fcpxml
 DEFAULT_FILLER_BACKEND = "whisper"  # whisper | coreml (fast on-device classifier)
 
 # Retake removal (see crisp.retake): when you misspeak and immediately say a phrase

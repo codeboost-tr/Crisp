@@ -30,6 +30,9 @@ public struct CleanRunner {
         var srt_output: String?
         var vtt_output: String?
         var backup: String?
+        var export_timeline: String?
+        var project_dir: String?
+        var media_output: String?
     }
 
     /// A progress signal for the one file being cleaned. `fraction` is 0…1 for this
@@ -100,6 +103,7 @@ public struct CleanRunner {
             "--audio-codec", parameters.audioCodec,
             "--audio-bitrate", String(parameters.audioBitrateKbps),
             "--container", parameters.outputContainer,
+            "--color-depth", parameters.colorDepth,
             "--ndjson"
         ]
         // Cut smoothing — applied to every clean (kept out of the literal above so the
@@ -107,6 +111,18 @@ public struct CleanRunner {
         args += ["--fade-ms", String(parameters.fadeMs),
                  "--crossfade-ms", String(parameters.crossfadeMs),
                  "--snap-ms", String(parameters.snapMs)]
+        // Frame-rate handling — applies to every render (incl. a reviewed keep-list),
+        // so it lives outside the keep-file branch. The chosen fps is only meaningful
+        // in "constant" mode; "auto" lets the engine pick the source's own rate.
+        args += ["--fps-mode", parameters.frameRateMode]
+        if parameters.frameRateMode == FrameRateMode.constant.rawValue {
+            args += ["--fps", String(parameters.frameRateValue)]
+        }
+        // Editor handoff: write an FCPXML project instead of rendering a video. Applies
+        // to every clean (incl. a reviewed keep-list), so it lives outside that branch.
+        // Always pass it explicitly — including "none" — so the Swift config is
+        // authoritative and behaviour never depends on clean_video.py's own default.
+        args += ["--export-timeline", parameters.exportTimeline]
         if parameters.hardwareEncoding { args.append("--hardware") }
         if parameters.splitTracks {
             args.append("--split")
@@ -236,7 +252,10 @@ public struct CleanRunner {
                             audioOutput: ev.audio_output ?? "",
                             srtOutput: ev.srt_output ?? "",
                             vttOutput: ev.vtt_output ?? "",
-                            backup: ev.backup ?? "")
+                            backup: ev.backup ?? "",
+                            exportTimeline: ev.export_timeline ?? "none",
+                            projectDir: ev.project_dir ?? "",
+                            mediaOutput: ev.media_output ?? "")
                     case "error":
                         throw NSError(domain: "Crisp", code: 1,
                                       userInfo: [NSLocalizedDescriptionKey: ev.message ?? "Unknown error"])

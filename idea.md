@@ -1,58 +1,41 @@
-# Crisp — feature ideas / roadmap
+# Crisp — roadmap
 
-Polish, speed, and stability ideas for the app. Grounded in the current
-architecture (SwiftUI app driving the stdlib Python engine). Sequenced by
-impact-per-effort. Living doc — add/reorder freely.
+The roadmap now lives in **GitHub Issues + a Project board**, not in this file.
+Track work there instead of hand-editing markdown.
 
----
+## Where to look
 
-## 🎨 Polish (premium feel)
+- **Board (what to do next):** https://github.com/users/rafay99-epic/projects/4
+  — grouped by **Priority**: `Now` → `Next` → `Backlog`.
+- **Issues:** https://github.com/rafay99-epic/Crisp/issues
 
-1. **Before/after preview of the *result*** — scrub/play the cleaned result (or A/B
-   against the original) *before* writing the file. The "hear it before you commit"
-   step. Reuses the review timeline + preview sheet + waveform. **Top polish pick.**
-2. **Keyboard-driven cut review** — in the review timeline: `J/K/L` to move between
-   cuts, `space` to toggle keep/remove, and a **"play across this cut"** button to
-   hear whether a join is clean. Pairs with the smooth-cuts work.
-3. **Re-weight the progress bar** — fix the "rockets to ~60% then crawls": give the
-   encode phase a bigger share so the bar tracks wall-clock. Small (stage labels
-   already exist).
+## Conventions
 
-## ⚡ Speed (the cost is the re-encode, not the model)
+- **Priority labels:** `priority:now` (committed foundations), `priority:next`
+  (committed feature wave), `priority:backlog` (longer horizon).
+- **Area labels:** `area:licensing`, `area:platform`, `area:audio`, `area:video`,
+  `area:transcript`, `area:engine`, `area:ux`, `area:ml`, `area:reach`.
+- A PR that closes an item references it (`Closes #NN`) so the board auto-updates.
 
-4. **Smart-cut / stream-copy hybrid** — *the* speed lever. Copy the video stream
-   losslessly for the interior of each kept segment and only re-encode the few frames
-   at each cut boundary (GOP edges). Most of a video is copied, not encoded — often
-   5–10× faster on long videos. **Big effort** (GOP analysis, mixing copied +
-   re-encoded segments, muxing), highest speed payoff.
-5. **Cache the analysis between re-cleans** — re-cleaning the same file with only
-   encoder/quality changed re-extracts audio + re-detects every time. Cache that
-   (keyed by file + detection params) so encoder tweaks are instant. Cheap, safe.
+## Committed order (snapshot)
 
-## 🛟 Stability (what will actually bite real users)
+Foundations first, then the feature wave:
 
-6. **Variable-frame-rate (VFR) handling** — screen recorders (the core use case!)
-   often output VFR, and the trim→`setpts`→concat path can drift A/V on VFR sources.
-   Detect VFR (ffprobe) and normalize to CFR / handle timestamps explicitly. **Top
-   stability pick — latent correctness bug for the exact videos Crisp targets.**
-7. **Preflight checks** — before a long render: enough disk space for the output, a
-   valid video+audio stream, a decodable codec. Fail fast with a clear message
-   instead of dying mid-encode.
-8. **Graceful odd-input handling** — no-audio videos, corrupt/partial files, exotic
-   codecs → a clean error, never a crash or a half-written file.
+1. Licensing & paid tier via Polar.sh — #85
+2. Windows support (shared core + native UI) — #87
+3. Captions / subtitles export — #88
+4. Auto-reframe to vertical / short-form — #89
+5. "Studio sound" audio pass — #90
+6. Speaker diarization — #91
+7. Cut / chapter markers during the cut — #92
+8. Audio volume / gain control — #93
 
-## 🔁 Cross-cutting (polish + the model flywheel)
+Quick views:
 
-9. **Review-timeline feedback loop** — capture which predicted cuts the user keeps vs
-   removes → labeled data from real usage → feeds the next model. The "reward/treat"
-   idea done right (active learning, not RL). Both a UX win (the app learns your
-   taste) and the highest-leverage long-term data source. Already noted in
-   `research/NOTES.md` §6 as "data collection — later".
+```sh
+gh issue list --label priority:now      # the foundations
+gh issue list --label priority:next     # the feature wave
+```
 
----
-
-## Suggested sequence
-1. **VFR handling** (stability — protects screen recordings)
-2. **Result preview + keyboard review** (polish — low risk)
-3. **Smart-cut** (speed — big project)
-4. **Feedback loop** (the flywheel)
+> Shipped & pruned so far: VFR handling (PR #77), Export to editor / FCPXML
+> (PR #79), Quit guard during render (PR #80). See git history for the record.

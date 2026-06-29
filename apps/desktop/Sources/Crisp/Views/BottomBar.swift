@@ -163,6 +163,15 @@ struct BottomBar: View {
 
     // MARK: - Trailing action
 
+    /// The primary-button title. With editor handoff on, the cut produces an editor
+    /// timeline (no render), so the button says "Prepare for Editor".
+    private var startTitle: String {
+        if settings.exportToEditor {
+            return pending == 1 ? "Prepare for Editor" : "Prepare \(pending) for Editor"
+        }
+        return pending == 1 ? "Clean Video" : "Clean \(pending) Videos"
+    }
+
     @ViewBuilder private var action: some View {
         if model.isRunning {
             Button(role: .cancel) { model.cancel() } label: {
@@ -172,7 +181,7 @@ struct BottomBar: View {
             .keyboardShortcut(.cancelAction)
         } else if pending > 0 {
             Button(action: onStart) {
-                Label(pending == 1 ? "Clean Video" : "Clean \(pending) Videos", systemImage: "scissors")
+                Label(startTitle, systemImage: settings.exportToEditor ? "film.stack" : "scissors")
                     .padding(.horizontal, 6)
             }
             .buttonStyle(.borderedProminent).controlSize(.large)

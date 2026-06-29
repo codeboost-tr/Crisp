@@ -12,6 +12,9 @@ struct QueueView: View {
 
     @State private var previewItem: QueueItem?
     @State private var reviewItem: QueueItem?
+    // One editor-handoff picker for the whole queue (hosted here, not per-row) so a
+    // batch of exports can't stack/lose sheets and List row recycling can't tear it down.
+    @State private var editorPickerItem: QueueItem?
 
     var body: some View {
         List {
@@ -19,7 +22,8 @@ struct QueueView: View {
                 ForEach($model.queue) { $item in
                     QueueRow(item: $item, model: model, player: player, presets: settings.presets,
                              onPreview: { previewItem = item },
-                             onReview: { reviewItem = item })
+                             onReview: { reviewItem = item },
+                             onEditorPicker: { editorPickerItem = item })
                         .listRowSeparator(.hidden)
                 }
                 .onMove(perform: model.moveWaiting)
@@ -41,6 +45,11 @@ struct QueueView: View {
         }
         .sheet(item: $reviewItem) { item in
             ReviewSheet(item: item, model: model, settings: settings)
+        }
+        .sheet(item: $editorPickerItem) { item in
+            EditorPickerSheet(editors: EditorDetector.installed(),
+                              onOpen: { EditorDetector.openForImport($0, result: item.result) },
+                              onReveal: { EditorDetector.revealProject(for: item.result) })
         }
     }
 
@@ -64,6 +73,9 @@ private struct QueueRow: View {
     let presets: [Preset]
     let onPreview: () -> Void
     let onReview: () -> Void
+    /// Ask the parent (QueueView) to show the editor-handoff picker for this row — one
+    /// shared sheet, so batches and List recycling can't break it.
+    let onEditorPicker: () -> Void
 
     /// The cleaned file, once it exists — used for drag-out, reveal, preview, copy.
     private var outputURL: URL? {
@@ -71,13 +83,29 @@ private struct QueueRow: View {
         return URL(fileURLWithPath: path)
     }
 
+    /// True when this clean produced an editor project (a copy + .fcpxml timeline)
+    /// instead of a rendered video — the result actions become "open/reveal project".
+    private var editorExport: Bool { item.result?.exportTimeline == "fcpxml" }
+    private var projectURL: URL? {
+        guard let path = item.result?.projectDir, !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path)
+    }
+    private func revealProject() { EditorDetector.revealProject(for: item.result) }
+    private func openInEditor(_ editor: VideoEditor) {
+        EditorDetector.openForImport(editor, result: item.result)
+    }
+
     var body: some View {
         Group {
             if item.status == .done, let url = outputURL {
-                // Drag the finished file straight into Finder, an editor, or an
-                // upload box — the last step of the clean → publish flow.
-                rowContent.draggable(url) {
-                    Label(item.url.lastPathComponent, systemImage: "scissors")
+                // Drag the result into Finder / an editor / an upload box. For an editor
+                // handoff drag the whole project FOLDER (the .fcpxml alone would lose its
+                // media references), with a matching label/icon.
+                let dragURL = editorExport ? (projectURL ?? url) : url
+                rowContent.draggable(dragURL) {
+                    Label(editorExport ? "\(item.url.deletingPathExtension().lastPathComponent) (Crisp)"
+                                       : item.url.lastPathComponent,
+                          systemImage: editorExport ? "film.stack" : "scissors")
                 }
             } else {
                 rowContent
@@ -86,6 +114,11 @@ private struct QueueRow: View {
         .padding(.vertical, 3)
         .animation(.smooth, value: item.status)
         .contextMenu { contextMenu }
+        // When an editor-handoff cut finishes, ask the parent to pop the (shared) picker
+        // so the user just chooses where to open.
+        .onChange(of: item.status) { _, status in
+            if status == .done, editorExport { onEditorPicker() }
+        }
     }
 
     private var rowContent: some View {
@@ -198,7 +231,16 @@ private struct QueueRow: View {
                     Text("removed \(formatTime(r.savedSeconds))")
                         .font(.caption).foregroundStyle(.secondary).fixedSize()
                 }
-                if let url = outputURL {
+                // Editor handoff produced a project, not a video — open it in an editor
+                // (a picker, in case more than one is installed) or reveal the project.
+                if editorExport {
+                    Button { onEditorPicker() } label: { Image(systemName: "film.stack") }
+                        .buttonStyle(.plain).foregroundStyle(.tint)
+                        .help("Open in a video editor")
+                    Button { revealProject() } label: { Image(systemName: "folder") }
+                        .buttonStyle(.plain).foregroundStyle(.tint)
+                        .help("Show project in Finder")
+                } else if let url = outputURL {
                     Button { player.toggle(url) } label: {
                         Image(systemName: player.isPlaying(url) ? "stop.circle.fill" : "play.circle")
                             .contentTransition(.symbolEffect(.replace))
@@ -227,8 +269,16 @@ private struct QueueRow: View {
         switch item.status {
         case .done:
             if let cuts = item.result?.cutsSummary { Text("Removed \(cuts)") }
-            if let summary = sizeSummary { Text(summary) }
-            if let url = outputURL {
+            // Skip the file-size summary for an editor handoff — there's no rendered
+            // video, so comparing the original to the tiny .fcpxml would mislead.
+            if !editorExport, let summary = sizeSummary { Text(summary) }
+            if editorExport {
+                ForEach(EditorDetector.installed()) { editor in
+                    Button { openInEditor(editor) } label: { Label("Open in \(editor.name)", systemImage: "film.stack") }
+                }
+                Button { revealProject() } label: { Label("Reveal Editor Project", systemImage: "folder") }
+                Button { copyOutputPath() } label: { Label("Copy Timeline Path", systemImage: "doc.on.doc") }
+            } else if let url = outputURL {
                 Button { revealOutput() } label: { Label("Show in Finder", systemImage: "folder") }
                 Button { copyOutputPath() } label: { Label("Copy Output Path", systemImage: "doc.on.doc") }
                 Button { player.toggle(url) } label: {
@@ -236,8 +286,8 @@ private struct QueueRow: View {
                           systemImage: player.isPlaying(url) ? "stop.fill" : "play.fill")
                 }
             }
-            // The split-track stems, when the clean produced them.
-            if let video = stemURL(item.result?.videoOutput) {
+            // The split-track stems, when the clean produced them (render mode only).
+            if !editorExport, let video = stemURL(item.result?.videoOutput) {
                 Button { reveal(video) } label: { Label("Show Video Track", systemImage: "film") }
             }
             if let audio = stemURL(item.result?.audioOutput) {

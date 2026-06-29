@@ -17,6 +17,10 @@ public struct CleanParameters: Equatable, Sendable {
     public let audioCodec: String
     public let audioBitrateKbps: Int
     public let outputContainer: String
+    public let colorDepth: String        // "auto" | "8" | "10" — output bit depth
+    public let frameRateMode: String     // "auto" | "passthrough" | "constant"
+    public let frameRateValue: Double    // fps used when mode == "constant"
+    public let exportTimeline: String    // "none" (render) | "fcpxml" (editor handoff)
     public let outputDirectory: String   // "" ⇒ beside the source
     public let splitTracks: Bool         // also write separate video/audio files
     public let splitAudioFormat: String  // "match" | "wav" — audio stem format
@@ -28,6 +32,9 @@ public struct CleanParameters: Equatable, Sendable {
                 fadeMs: Double = 10, crossfadeMs: Double = 0, snapMs: Double = 12,
                 videoCodec: String, hardwareEncoding: Bool, videoQuality: String,
                 audioCodec: String, audioBitrateKbps: Int, outputContainer: String,
+                colorDepth: String = "auto",
+                frameRateMode: String = "auto", frameRateValue: Double = 30,
+                exportTimeline: String = "none",
                 outputDirectory: String, splitTracks: Bool, splitAudioFormat: String,
                 captionsFormat: String = "none", retakeSensitivity: String = "aggressive",
                 backupOriginal: Bool) {
@@ -44,6 +51,10 @@ public struct CleanParameters: Equatable, Sendable {
         self.audioCodec = audioCodec
         self.audioBitrateKbps = audioBitrateKbps
         self.outputContainer = outputContainer
+        self.colorDepth = colorDepth
+        self.frameRateMode = frameRateMode
+        self.frameRateValue = frameRateValue
+        self.exportTimeline = exportTimeline
         self.outputDirectory = outputDirectory
         self.splitTracks = splitTracks
         self.splitAudioFormat = splitAudioFormat
@@ -70,6 +81,14 @@ extension Strength {
             audioCodec: config.audioCodec,
             audioBitrateKbps: config.audioBitrateKbps,
             outputContainer: config.outputContainer,
+            // Clamp a hand-edited/corrupt value to the default so the engine's
+            // --color-depth (fixed choices) never hard-fails a clean.
+            colorDepth: ColorDepth(rawValue: config.colorDepth)?.rawValue
+                ?? ColorDepth.auto.rawValue,
+            frameRateMode: FrameRateMode(rawValue: config.frameRateMode)?.rawValue
+                ?? FrameRateMode.auto.rawValue,
+            frameRateValue: config.frameRateValue,
+            exportTimeline: config.exportToEditor ? "fcpxml" : "none",
             outputDirectory: config.outputDirectory,
             splitTracks: config.splitTracks,
             splitAudioFormat: config.splitAudioFormat,
