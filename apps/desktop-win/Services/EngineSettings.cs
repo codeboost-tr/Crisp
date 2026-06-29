@@ -42,6 +42,9 @@ public partial class EngineSettings : ObservableObject
     private string _selectedModelId = "base.en";
     [ObservableProperty] private string _customModelPath = "";
     [ObservableProperty] private bool _exportToEditor; // FCPXML timeline instead of a render
+    [ObservableProperty] private bool _splitTracks; // also write separate video + audio
+    [ObservableProperty] private string _splitAudioFormat = "match";
+    public string[] SplitAudioFormats { get; } = { "match", "wav" };
 
     public IReadOnlyList<ModelSpec> ModelOptions => ModelCatalog.All;
     public ModelSpec SelectedModel
@@ -97,6 +100,8 @@ public partial class EngineSettings : ObservableObject
         SelectedModelId = _config.SelectedModelId;
         CustomModelPath = _config.CustomModelPath;
         ExportToEditor = _config.ExportToEditor;
+        SplitTracks = _config.SplitTracks;
+        SplitAudioFormat = _config.SplitAudioFormat;
         _loading = false;
     }
 
@@ -132,6 +137,8 @@ public partial class EngineSettings : ObservableObject
         _config.SelectedModelId = SelectedModelId;
         _config.CustomModelPath = CustomModelPath;
         _config.ExportToEditor = ExportToEditor;
+        _config.SplitTracks = SplitTracks;
+        _config.SplitAudioFormat = SplitAudioFormat;
         _config.Save();
     }
 
@@ -176,6 +183,7 @@ public partial class EngineSettings : ObservableObject
 
         if (CaptionsFormat != "none") { a.Add("--captions"); a.Add(CaptionsFormat); }
         if (ExportToEditor) { a.Add("--export-timeline"); a.Add("fcpxml"); } // editor handoff, no render
+        if (SplitTracks) { a.Add("--split"); a.Add("--split-audio"); a.Add(SplitAudioFormat); }
 
         if (BackupOriginal)
         {

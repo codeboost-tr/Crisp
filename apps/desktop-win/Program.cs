@@ -58,6 +58,7 @@ sealed class Program
         if (args.Contains("--fillers")) vm.RemoveFillers = true;
         if (args.Contains("--retakes")) vm.RemoveRetakes = true;
         if (args.Contains("--export")) vm.Settings.ExportToEditor = true;
+        if (args.Contains("--split")) { vm.Settings.SplitTracks = true; vm.Settings.SplitAudioFormat = "wav"; }
         var videos = args.Where(a => !a.StartsWith("--")).ToArray();
         vm.AddFiles(videos);
         Console.WriteLine($"toggles: fillers={vm.RemoveFillers} retakes={vm.RemoveRetakes} needsModel={vm.NeedsModel}");

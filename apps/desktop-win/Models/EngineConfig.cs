@@ -50,6 +50,9 @@ public sealed class EngineConfig
     public string CustomModelPath { get; set; } = "";
     // Prepare an editor timeline (FCPXML + media copy) instead of rendering a cut.
     public bool ExportToEditor { get; set; }
+    // Also write separate video + audio files alongside the cleaned render.
+    public bool SplitTracks { get; set; }
+    public string SplitAudioFormat { get; set; } = "match"; // match | wav
 
     /// Every other key in the file (presets, watch, concurrency, model ids, …) —
     /// preserved verbatim on round-trip so the Windows app never drops them.
