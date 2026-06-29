@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -14,47 +13,48 @@ using Crisp.Services;
 
 namespace Crisp.ViewModels;
 
-public enum AppState { Empty, Ready, Running, Done }
-
 public partial class MainWindowViewModel : ViewModelBase
 {
+    public ObservableCollection<QueueItem> Queue { get; } = new();
+
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsEmpty), nameof(IsReady), nameof(IsRunning), nameof(IsDone))]
-    private AppState _state = AppState.Empty;
+    [NotifyPropertyChangedFor(nameof(IsEmpty))]
+    private bool _hasItems;
 
-    public bool IsEmpty => State == AppState.Empty;
-    public bool IsReady => State == AppState.Ready;
-    public bool IsRunning => State == AppState.Running;
-    public bool IsDone => State == AppState.Done;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BottomShowsRecipe), nameof(BottomShowsSummary))]
+    private bool _isRunning;
 
-    [ObservableProperty] private string? _videoPath;
-    [ObservableProperty] private string _fileName = "";
-    [ObservableProperty] private double _progress;
+    [ObservableProperty] private double _overallProgress; // 0…1
     [ObservableProperty] private string _status = "";
-    [ObservableProperty] private string _resultSummary = "";
-    [ObservableProperty] private string? _outputPath;
     [ObservableProperty] private bool _isDropTargeted;
 
-    // Strength picker. Filler/retake removal needs the speech model (a later
-    // iteration), so it's surfaced disabled in the view — pauses-only runs today.
+    public bool IsEmpty => !HasItems;
+
+    // Global recipe (applies to every file in the batch) — lives in the bottom bar.
     public IReadOnlyList<StrengthPreset> StrengthOptions { get; } = Strengths.All;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedStrengthDetail))]
     private StrengthPreset _selectedStrength = Strengths.Of(Strength.Aggressive);
     public string SelectedStrengthDetail => SelectedStrength.Detail;
 
-    public ObservableCollection<string> Log { get; } = new();
-
-    // Filler-word removal needs the whisper speech model. The store derives its
-    // state from disk; the toggle + Clean gate on it.
     public ModelStore Models { get; } = new();
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NeedsModel), nameof(CanClean))]
     private bool _removeFillers;
 
-    /// Fillers requested but the model isn't downloaded yet — show the install control.
     public bool NeedsModel => RemoveFillers && !Models.IsReady;
     public bool CanClean => !NeedsModel;
+
+    // Bottom-bar mode: recipe shown when there are waiting files and we're idle.
+    public int PendingCount => Queue.Count(q => q.Status == QueueStatus.Waiting);
+    public int DoneCount => Queue.Count(q => q.Status == QueueStatus.Done);
+    public bool BottomShowsRecipe => !IsRunning && PendingCount > 0;
+    public bool BottomShowsSummary => !IsRunning && PendingCount == 0 && DoneCount > 0;
+    public string CleanButtonLabel => PendingCount == 1 ? "Clean Video" : $"Clean {PendingCount} Videos";
+    public string CountLabel => IsRunning ? $"{DoneCount} of {Queue.Count} done"
+        : PendingCount == Queue.Count ? $"{Queue.Count} video{(Queue.Count == 1 ? "" : "s")}"
+        : $"{DoneCount} done · {PendingCount} waiting";
 
     private readonly CrispEngine _engine;
     private CancellationTokenSource? _cts;
@@ -68,10 +68,175 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 OnPropertyChanged(nameof(NeedsModel));
                 OnPropertyChanged(nameof(CanClean));
+                CleanAllCommand.NotifyCanExecuteChanged();
             }
         };
-        _ = Models.RefreshAsync(); // derive model state from disk at launch
+        Queue.CollectionChanged += (_, _) => RefreshCounts();
+        _ = Models.RefreshAsync();
     }
+
+    private void RefreshCounts()
+    {
+        HasItems = Queue.Count > 0;
+        OnPropertyChanged(nameof(PendingCount));
+        OnPropertyChanged(nameof(DoneCount));
+        OnPropertyChanged(nameof(BottomShowsRecipe));
+        OnPropertyChanged(nameof(BottomShowsSummary));
+        OnPropertyChanged(nameof(CleanButtonLabel));
+        OnPropertyChanged(nameof(CountLabel));
+        OnPropertyChanged(nameof(SummaryText));
+        CleanAllCommand.NotifyCanExecuteChanged();
+    }
+
+    /// Append one or more videos as waiting rows (drag-drop / picker / open-with).
+    public void AddFiles(IEnumerable<string> paths)
+    {
+        foreach (var p in paths)
+            if (File.Exists(p) && Queue.All(q => q.Path != p))
+                Queue.Add(new QueueItem(p));
+    }
+
+    [RelayCommand]
+    private void Remove(QueueItem item)
+    {
+        if (item.Status != QueueStatus.Running) Queue.Remove(item);
+    }
+
+    [RelayCommand]
+    private void Retry(QueueItem item)
+    {
+        item.Status = QueueStatus.Waiting;
+        item.Error = null;
+        item.Progress = 0;
+        RefreshCounts();
+    }
+
+    [RelayCommand]
+    private void Clear()
+    {
+        if (IsRunning) return;
+        for (var i = Queue.Count - 1; i >= 0; i--)
+            if (Queue[i].Status != QueueStatus.Running) Queue.RemoveAt(i);
+    }
+
+    private bool CanCleanAll() => !IsRunning && PendingCount > 0 && CanClean;
+
+    [RelayCommand(CanExecute = nameof(CanCleanAll))]
+    private async Task CleanAll()
+    {
+        var waiting = Queue.Where(q => q.Status == QueueStatus.Waiting).ToList();
+        if (waiting.Count == 0) return;
+
+        IsRunning = true;
+        RefreshCounts();
+        _cts = new CancellationTokenSource();
+        var args = BuildArgs();
+
+        foreach (var item in waiting)
+        {
+            if (_cts.IsCancellationRequested) break;
+            try { await CleanItem(item, args, _cts.Token); }
+            catch (OperationCanceledException) { item.Status = QueueStatus.Cancelled; break; }
+            RefreshCounts();
+        }
+
+        IsRunning = false;
+        _cts = null;
+        UpdateOverall();
+        RefreshCounts();
+    }
+
+    [RelayCommand]
+    private void Cancel() => _cts?.Cancel();
+
+    private async Task CleanItem(QueueItem item, IReadOnlyList<string> args, CancellationToken ct)
+    {
+        item.Status = QueueStatus.Running;
+        item.Progress = 0;
+        item.Stage = "Starting…";
+        item.Error = null;
+        var progress = new Progress<EngineEvent>(ev => OnItemEvent(item, ev));
+
+        var code = await _engine.RunAsync(item.Path, args, progress, ct);
+        if (item.Status == QueueStatus.Running)
+        {
+            item.Status = code == 0 ? QueueStatus.Done : QueueStatus.Failed;
+            if (code != 0 && item.Error is null) item.Error = $"Engine exited {code}.";
+        }
+    }
+
+    private IReadOnlyList<string> BuildArgs()
+    {
+        var args = new List<string>(Strengths.ToArgs(SelectedStrength.Value));
+        if (RemoveFillers && Models.ReadyModelPath is { } modelPath)
+        {
+            args.Add("--model"); args.Add(modelPath);
+            args.Add("--no-retakes"); // retakes are a later iteration
+        }
+        else
+        {
+            args.Add("--no-fillers"); args.Add("--no-retakes");
+        }
+        args.Add("--no-backup");
+        return args;
+    }
+
+    private void OnItemEvent(QueueItem item, EngineEvent ev)
+    {
+        switch (ev.Event)
+        {
+            case "progress":
+                if (ev.Fraction is { } f) item.Progress = Math.Clamp(f, 0, 1);
+                if (!string.IsNullOrWhiteSpace(ev.Label)) item.Stage = ev.Label!;
+                UpdateOverall();
+                break;
+            case "result": ApplyResult(item, ev.Raw); break;
+            case "error": item.Error = ev.Message ?? ev.Raw; break;
+        }
+    }
+
+    private void UpdateOverall()
+    {
+        if (Queue.Count == 0) { OverallProgress = 0; return; }
+        double sum = 0;
+        foreach (var q in Queue)
+            sum += q.Status == QueueStatus.Done ? 1 : q.Status == QueueStatus.Running ? q.Progress : 0;
+        OverallProgress = sum / Queue.Count;
+        Status = Queue.FirstOrDefault(q => q.Status == QueueStatus.Running)?.Stage ?? "";
+    }
+
+    private void ApplyResult(QueueItem item, string rawJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(rawJson);
+            var r = doc.RootElement;
+            item.OutputPath = r.TryGetProperty("output", out var o) ? o.GetString() : null;
+            item.OrigSeconds = Num(r, "orig_seconds");
+            item.SavedSeconds = Num(r, "saved_seconds");
+            int pauses = (int)Num(r, "pauses"), fillers = (int)Num(r, "fillers");
+            var parts = new List<string>();
+            if (fillers > 0) parts.Add($"{fillers} filler{(fillers == 1 ? "" : "s")}");
+            if (pauses > 0) parts.Add($"{pauses} pause{(pauses == 1 ? "" : "s")}");
+            item.CutsSummary = parts.Count > 0 ? string.Join(" · ", parts) : "";
+        }
+        catch (JsonException) { /* leave summary empty */ }
+    }
+
+    /// Batch summary for the bottom bar once everything finishes.
+    public string SummaryText
+    {
+        get
+        {
+            var done = Queue.Where(q => q.Status == QueueStatus.Done).ToList();
+            if (done.Count == 0) return "";
+            var saved = done.Sum(q => q.SavedSeconds);
+            return $"Cleaned {done.Count} · saved {Formatting.Duration(saved)}";
+        }
+    }
+
+    private static double Num(JsonElement e, string name) =>
+        e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0;
 
     [RelayCommand]
     private Task DownloadModel() => Models.DownloadAsync();
@@ -79,110 +244,40 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void CancelModel() => Models.Cancel();
 
-    /// Drag-drop / picker entry point. One file for now (queue is a later iteration).
-    public void SetFile(string path)
+    [RelayCommand]
+    private void Reveal(QueueItem item) => RevealInOS(item.OutputPath);
+
+    [RelayCommand]
+    private void RevealAll()
     {
-        if (IsRunning) return;
-        VideoPath = path;
-        FileName = Path.GetFileName(path);
-        Log.Clear();
-        Progress = 0;
-        ResultSummary = "";
-        OutputPath = null;
-        Status = "";
-        State = AppState.Ready;
+        // Reveal each cleaned file (they may span folders).
+        foreach (var path in Queue.Where(q => q.IsDone).Select(q => q.OutputPath))
+            RevealInOS(path);
     }
 
-    [RelayCommand]
-    private void Reset() => State = AppState.Empty;
-
-    [RelayCommand]
-    private async Task Clean()
+    // Reveal a file in the OS browser. ponytail: per-OS one-liners, no library.
+    private static void RevealInOS(string? path)
     {
-        if (VideoPath is null || !File.Exists(VideoPath)) { State = AppState.Empty; return; }
-
-        State = AppState.Running;
-        Progress = 0;
-        Log.Clear();
-        Status = "Starting…";
-        _cts = new CancellationTokenSource();
-        var progress = new Progress<EngineEvent>(OnEvent); // captures UI thread
-
-        var args = new List<string>(Strengths.ToArgs(SelectedStrength.Value));
-        if (RemoveFillers && Models.ReadyModelPath is { } modelPath)
-        {
-            // Fillers on: whisper transcribes via this model. Retakes stay off — a
-            // distinct toggle in a later iteration.
-            args.Add("--model"); args.Add(modelPath);
-            args.Add("--no-retakes");
-        }
-        else
-        {
-            args.Add("--no-fillers"); args.Add("--no-retakes"); // pauses-only
-        }
-        args.Add("--no-backup");
-
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
         try
         {
-            var code = await _engine.RunAsync(VideoPath, args, progress, _cts.Token);
-            State = code == 0 ? AppState.Done : AppState.Ready;
-            if (code != 0) Status = $"Engine exited {code}.";
+            if (OperatingSystem.IsWindows())
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                    "explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+            else if (OperatingSystem.IsMacOS())
+                System.Diagnostics.Process.Start("open", new[] { "-R", path });
+            else
+                System.Diagnostics.Process.Start("xdg-open", new[] { Path.GetDirectoryName(path) ?? "." });
         }
-        catch (OperationCanceledException) { State = AppState.Ready; Status = "Cancelled."; }
-        catch (Exception ex) { State = AppState.Ready; Status = "Failed to launch engine."; Log.Add("EXC: " + ex.Message); }
-        finally { _cts = null; }
+        catch { /* reveal is best-effort */ }
     }
 
-    [RelayCommand]
-    private void Cancel() => _cts?.Cancel();
-
-    private void OnEvent(EngineEvent ev)
-    {
-        switch (ev.Event)
-        {
-            case "progress":
-                if (ev.Fraction is { } f) Progress = Math.Clamp(f * 100, 0, 100);
-                if (!string.IsNullOrWhiteSpace(ev.Label)) Status = ev.Label!;
-                break;
-            case "log": Log.Add(ev.Message ?? ""); break;
-            case "result": ApplyResult(ev.Raw); Progress = 100; break;
-            case "error": Log.Add("⛔️ " + (ev.Message ?? ev.Raw)); Status = "Error."; break;
-        }
-    }
-
-    private void ApplyResult(string rawJson)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(rawJson);
-            var r = doc.RootElement;
-            OutputPath = r.TryGetProperty("output", out var o) ? o.GetString() : null;
-            double orig = Num(r, "orig_seconds"), neu = Num(r, "new_seconds"), saved = Num(r, "saved_seconds");
-            int pauses = (int)Num(r, "pauses");
-            ResultSummary = $"{Fmt(orig)} → {Fmt(neu)}   ·   saved {Fmt(saved)}   ·   {pauses} pauses cut";
-            Status = "Done.";
-        }
-        catch (JsonException) { ResultSummary = "Done."; }
-    }
-
-    private static double Num(JsonElement e, string name) =>
-        e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0;
-
-    private static string Fmt(double seconds)
-    {
-        var t = TimeSpan.FromSeconds(seconds);
-        return t.TotalMinutes >= 1
-            ? $"{(int)t.TotalMinutes}m {t.Seconds}s"
-            : seconds.ToString("0.#", CultureInfo.InvariantCulture) + "s";
-    }
-
-    // ponytail: dev-only path resolution. Walk up to the shared engine; override with
-    // CRISP_ENGINE_SCRIPT. The shipped Windows build will bundle the engine beside the .exe.
+    // ponytail: dev-only path resolution; override with CRISP_ENGINE_SCRIPT. The shipped
+    // Windows build bundles the engine beside the .exe.
     private static string ResolveEngineScript()
     {
         var env = Environment.GetEnvironmentVariable("CRISP_ENGINE_SCRIPT");
         if (!string.IsNullOrEmpty(env)) return env;
-
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {

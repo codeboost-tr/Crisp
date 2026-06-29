@@ -1,7 +1,4 @@
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -37,37 +34,25 @@ public partial class MainWindow : Window
     {
         if (Vm is not { } vm) return;
         vm.IsDropTargeted = false;
-        var path = e.DataTransfer.TryGetFile()?.TryGetLocalPath();
-        if (path is not null) vm.SetFile(path);
+        var paths = e.DataTransfer.TryGetFiles()?
+            .Select(f => f.TryGetLocalPath())
+            .Where(p => p is not null)
+            .Select(p => p!);
+        if (paths is not null) vm.AddFiles(paths);
     }
 
     private async void OnBrowse(object? sender, RoutedEventArgs e)
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Choose a video",
-            AllowMultiple = false,
+            Title = "Choose videos",
+            AllowMultiple = true,
             FileTypeFilter = new[]
             {
                 new FilePickerFileType("Video") { Patterns = new[] { "*.mp4", "*.mov", "*.mkv", "*.m4v", "*.webm" } },
             },
         });
-        if (files.FirstOrDefault()?.TryGetLocalPath() is { } path && Vm is { } vm)
-            vm.SetFile(path);
-    }
-
-    private void OnReveal(object? sender, RoutedEventArgs e)
-    {
-        var path = Vm?.OutputPath;
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
-
-        // Reveal the output in the OS file browser. ponytail: per-OS one-liners,
-        // no library — Windows uses the shipped path, macOS/Linux for dev.
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            Process.Start("open", new[] { "-R", path });
-        else
-            Process.Start("xdg-open", new[] { Path.GetDirectoryName(path) ?? "." });
+        var paths = files.Select(f => f.TryGetLocalPath()).Where(p => p is not null).Select(p => p!).ToList();
+        if (paths.Count > 0 && Vm is { } vm) vm.AddFiles(paths);
     }
 }

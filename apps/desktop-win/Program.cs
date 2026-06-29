@@ -25,8 +25,29 @@ sealed class Program
         if (args.Length >= 1 && args[0] == "--model-test")
             return RunModelTest().GetAwaiter().GetResult();
 
+        // Headless queue batch: drive the real ViewModel through a multi-file clean.
+        //   dotnet run -- --queue-test <video1> <video2> …
+        if (args.Length >= 2 && args[0] == "--queue-test")
+            return RunQueueTest(args[1..]).GetAwaiter().GetResult();
+
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         return 0;
+    }
+
+    private static async Task<int> RunQueueTest(string[] videos)
+    {
+        var vm = new Crisp.ViewModels.MainWindowViewModel();
+        vm.AddFiles(videos);
+        Console.WriteLine($"queued {vm.Queue.Count} file(s); pending={vm.PendingCount}");
+        await vm.CleanAllCommand.ExecuteAsync(null);
+        var ok = true;
+        foreach (var item in vm.Queue)
+        {
+            Console.WriteLine($"  {item.Status,-9} {item.FileName}  saved={item.SavedText}  cuts=[{item.CutsSummary}]  err={item.Error}");
+            ok &= item.Status == Crisp.Models.QueueStatus.Done;
+        }
+        Console.WriteLine($"summary: {vm.SummaryText}");
+        return ok ? 0 : 1;
     }
 
     private static async Task<int> RunHeadless(string[] args)

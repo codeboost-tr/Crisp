@@ -23,10 +23,10 @@ public partial class App : Application
             var vm = new MainWindowViewModel();
             desktop.MainWindow = new MainWindow { DataContext = vm };
 
-            // "Open With" / file-association: a video path passed on the command line
-            // opens straight into the Ready state (both Windows and macOS pass argv).
-            var file = desktop.Args?.FirstOrDefault(a => !a.StartsWith('-'));
-            if (file is not null && System.IO.File.Exists(file)) vm.SetFile(file);
+            // "Open With" / file-association: video paths on the command line are queued
+            // (both Windows and macOS pass argv).
+            var files = desktop.Args?.Where(a => !a.StartsWith('-') && System.IO.File.Exists(a)).ToList();
+            if (files is { Count: > 0 }) vm.AddFiles(files);
         }
 
         base.OnFrameworkInitializationCompleted();
