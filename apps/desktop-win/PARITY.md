@@ -59,9 +59,9 @@ Legend: ✅ done · 🔜 remaining · 🟡 partial · ⛔ N/A on Windows (Apple-
 - ✅ Channel system (stable/nightly/dev) — `Channel` enum (CRISP_CHANNEL), isolated data homes (~/.crisp / -nightly / -dev), display name + header badge, dev has no updater, nightly tracks pre-releases (`--channel-test`)
 
 ## Shipping
-- 🟡 Cross-publish `win-x64` self-contained — verified from macOS
-- 🔜 Packaging: `vendor-win.ps1` (win64 ffmpeg/whisper/python) + MSIX/installer + signing
-- 🔜 CI `windows-latest` job (build + engine tests + publish artifact)
+- ✅ Cross-publish `win-x64` self-contained — `dotnet publish` produces Crisp.exe (verified from macOS + in CI)
+- ✅ CI `windows-latest` job (`windows.yml`: build + C# self-tests + shared-engine Python tests on real Windows + publish win-x64 artifact)
+- 🔜 Packaging: `vendor-win.ps1` (win64 ffmpeg/whisper/python, hash-pinned) + MSIX/installer + signing — needs verified Windows binary URLs/SHAs + a signing cert
 
 ## Deferred / N/A
 - ⛔ App Intents / Shortcuts (macOS); a CLI could substitute
