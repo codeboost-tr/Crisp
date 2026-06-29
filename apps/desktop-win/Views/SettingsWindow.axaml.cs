@@ -2,6 +2,7 @@ using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Crisp.Models;
 using Crisp.Services;
 
 namespace Crisp.Views;
@@ -42,5 +43,29 @@ public partial class SettingsWindow : Window
                 s.WatchFolderPath = path;
         }
         catch { /* picker cancelled / failed */ }
+    }
+
+    private void OnAddPreset(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not EngineSettings s) return;
+        var box = this.FindControl<TextBox>("NewPresetName");
+        var name = box?.Text?.Trim();
+        if (string.IsNullOrEmpty(name)) return;
+        // Capture the recipe exactly as configured in Settings — Custom means the preset's
+        // cut thresholds are the literal knob values shown here.
+        s.AddPreset(name, Strength.Custom);
+        if (box is not null) box.Text = "";
+    }
+
+    private void OnDeletePreset(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is EngineSettings s && (sender as Control)?.DataContext is Preset p)
+            s.DeletePreset(p.Id);
+    }
+
+    private void OnSetDefaultPreset(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is EngineSettings s && (sender as Control)?.DataContext is Preset p)
+            s.SetDefaultPreset(s.DefaultPresetId == p.Id ? null : p.Id); // toggle
     }
 }

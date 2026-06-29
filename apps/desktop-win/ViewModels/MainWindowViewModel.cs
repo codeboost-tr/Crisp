@@ -44,6 +44,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public ModelStore Models { get; } = new();
     public EngineSettings Settings { get; } = new();
+
+    /// Per-row preset picker choices: a "Global recipe" sentinel (Id "") + the saved
+    /// presets, kept in sync as the user adds/removes them in Settings.
+    public ObservableCollection<Preset> PresetChoices { get; } = new();
+    public bool HasPresets => Settings.Presets.Count > 0;
     public Updater Updater { get; } = new();
     public HistoryStore History { get; } = new();
     public OnboardingController Onboarding { get; } = new();
@@ -119,6 +124,12 @@ public partial class MainWindowViewModel : ViewModelBase
             if (e.PropertyName is nameof(EngineSettings.WatchEnabled) or nameof(EngineSettings.WatchFolderPath))
                 ApplyWatchSettings();
         };
+        RebuildPresetChoices();
+        Settings.Presets.CollectionChanged += (_, _) =>
+        {
+            RebuildPresetChoices();
+            OnPropertyChanged(nameof(HasPresets));
+        };
         _watch = new WatchFolder(OnWatchedVideo);
         ApplyWatchSettings();
         Queue.CollectionChanged += (_, _) => RefreshCounts();
@@ -145,6 +156,13 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(SummaryText));
         CleanAllCommand.NotifyCanExecuteChanged();
         UpdateOverall(); // keep the batch bar in sync when rows change state, not just on progress
+    }
+
+    private void RebuildPresetChoices()
+    {
+        PresetChoices.Clear();
+        PresetChoices.Add(new Preset { Id = "", Name = "Global recipe" });
+        foreach (var p in Settings.Presets) PresetChoices.Add(p);
     }
 
     private void ApplyWatchSettings()

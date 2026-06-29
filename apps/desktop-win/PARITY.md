@@ -44,7 +44,7 @@ Legend: ✅ done · 🔜 remaining · 🟡 partial · ⛔ N/A on Windows (Apple-
 
 ## Remaining app features (the loop is working through these)
 - ✅ Watch folder (auto-clean a folder) — in-app watcher; background-when-closed = Windows service follow-up
-- 🟡 Presets (named recipes a queue row can pick) — model + settings + per-row recipe resolution + macOS-shared round-trip done (`--preset-test`); Settings management UI + queue-row picker next
+- ✅ Presets (named recipes a queue row can pick) — model + macOS-shared round-trip (`--preset-test`); Settings card (save current / make default / delete) + per-row picker in the queue
 - ✅ Savings estimate (pre-flight "≈ X saved" before cleaning)
 - 🔜 Preview player (play the cleaned output in-app)
 - 🔜 Review & edit cuts (waveform timeline, manual keep/cut)

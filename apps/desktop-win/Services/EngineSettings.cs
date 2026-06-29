@@ -53,9 +53,12 @@ public partial class EngineSettings : ObservableObject
     // Presets: named recipes a queue row can pick; DefaultPresetId is the one new files
     // start on. Shared shape + keys with macOS, so a preset created on either round-trips.
     public ObservableCollection<Preset> Presets { get; } = new();
-    [ObservableProperty] private string _defaultPresetId = "";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DefaultPreset), nameof(DefaultPresetName))]
+    private string _defaultPresetId = "";
 
     public Preset? DefaultPreset => PresetById(DefaultPresetId);
+    public string DefaultPresetName => DefaultPreset?.Name ?? "Global recipe";
     public Preset? PresetById(string? id) =>
         string.IsNullOrEmpty(id) ? null : Presets.FirstOrDefault(p => p.Id == id);
 

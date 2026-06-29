@@ -184,8 +184,17 @@
                                                      Value="{Binding Progress}" Height="4"/>
                                         <TextBlock IsVisible="{Binding IsRunning}" Classes="secondary" FontSize="11"
                                                    Text="{Binding Stage}" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock IsVisible="{Binding IsWaiting}" Classes="secondary" FontSize="11"
-                                                   Text="Waiting"/>
+                                        <Panel IsVisible="{Binding IsWaiting}" HorizontalAlignment="Left">
+                                            <TextBlock Classes="secondary" FontSize="11" Text="Waiting"
+                                                       IsVisible="{Binding !$parent[ListBox].((vm:MainWindowViewModel)DataContext).HasPresets}"/>
+                                            <ComboBox FontSize="11" MinHeight="0" Padding="6,2" HorizontalAlignment="Left"
+                                                      AutomationProperties.Name="Preset for this file"
+                                                      IsVisible="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).HasPresets}"
+                                                      ItemsSource="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).PresetChoices}"
+                                                      SelectedValueBinding="{Binding Id}"
+                                                      SelectedValue="{Binding PresetId}"
+                                                      DisplayMemberBinding="{Binding Name}"/>
+                                        </Panel>
                                         <TextBlock IsVisible="{Binding IsDone}" Classes="secondary" FontSize="11"
                                                    Text="{Binding CutsSummary}"/>
                                         <TextBlock IsVisible="{Binding IsFailed}" Foreground="#FFE06666" FontSize="11"
