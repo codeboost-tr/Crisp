@@ -42,7 +42,16 @@ public partial class MainWindowViewModel : ViewModelBase
     public EngineSettings Settings { get; } = new();
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NeedsModel), nameof(CanClean))]
+    [NotifyCanExecuteChangedFor(nameof(CleanAllCommand))]
     private bool _removeFillers;
+
+    // Accepted video types (mirrors the Mac CleanRunner allow-list) — a dropped
+    // non-video is ignored rather than queued and failed.
+    private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp4", ".mov", ".mkv", ".m4v", ".webm", ".avi", ".flv", ".ts",
+        ".mpg", ".mpeg", ".wmv", ".m2ts", ".3gp", ".mts",
+    };
 
     public bool NeedsModel => RemoveFillers && !Models.IsReady;
     public bool CanClean => !NeedsModel;
@@ -90,10 +99,13 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// Append one or more videos as waiting rows (drag-drop / picker / open-with).
+    /// Ignores non-video files and de-dupes case-insensitively (Windows paths).
     public void AddFiles(IEnumerable<string> paths)
     {
         foreach (var p in paths)
-            if (File.Exists(p) && Queue.All(q => q.Path != p))
+            if (File.Exists(p)
+                && VideoExtensions.Contains(Path.GetExtension(p))
+                && !Queue.Any(q => string.Equals(q.Path, p, StringComparison.OrdinalIgnoreCase)))
                 Queue.Add(new QueueItem(p));
     }
 
@@ -133,19 +145,32 @@ public partial class MainWindowViewModel : ViewModelBase
         _cts = new CancellationTokenSource();
         var args = BuildArgs();
 
-        foreach (var item in waiting)
+        try
         {
-            if (_cts.IsCancellationRequested) break;
-            try { await CleanItem(item, args, _cts.Token); }
-            catch (OperationCanceledException) { item.Status = QueueStatus.Cancelled; break; }
+            foreach (var item in waiting)
+            {
+                if (_cts.IsCancellationRequested) break;
+                try { await CleanItem(item, args, _cts.Token); }
+                catch (OperationCanceledException) { item.Status = QueueStatus.Cancelled; break; }
+                // A failure to even launch the engine (e.g. Python missing) must fail the
+                // row and move on — never escape the loop and wedge IsRunning stuck true.
+                catch (Exception ex) { item.Status = QueueStatus.Failed; item.Error = LaunchError(ex); }
+                RefreshCounts();
+            }
+        }
+        finally
+        {
+            IsRunning = false;
+            _cts = null;
+            UpdateOverall();
             RefreshCounts();
         }
-
-        IsRunning = false;
-        _cts = null;
-        UpdateOverall();
-        RefreshCounts();
     }
+
+    private static string LaunchError(Exception ex) =>
+        ex is System.ComponentModel.Win32Exception
+            ? "Couldn't start the engine — Python wasn't found."
+            : ex.Message;
 
     [RelayCommand]
     private void Cancel() => _cts?.Cancel();
@@ -252,9 +277,12 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void RevealAll()
     {
-        // Reveal each cleaned file (they may span folders).
+        // Reveal one file per distinct folder (cleaned files may span folders) — don't
+        // open N Explorer/Finder windows for N files that share a directory.
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in Queue.Where(q => q.IsDone).Select(q => q.OutputPath))
-            RevealInOS(path);
+            if (path is not null && seen.Add(Path.GetDirectoryName(path) ?? path))
+                RevealInOS(path);
     }
 
     // Reveal a file in the OS browser. ponytail: per-OS one-liners, no library.

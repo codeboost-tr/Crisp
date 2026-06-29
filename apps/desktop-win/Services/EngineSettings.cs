@@ -139,7 +139,20 @@ public partial class EngineSettings : ObservableObject
         }
 
         if (CaptionsFormat != "none") { a.Add("--captions"); a.Add(CaptionsFormat); }
-        if (!BackupOriginal) a.Add("--no-backup");
+
+        if (BackupOriginal)
+        {
+            // Collect originals in a dated folder under the data home — not scattered in
+            // an _originals/ folder beside each source (CLAUDE.md product philosophy #2).
+            var dated = System.IO.Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+                ".crisp", "Originals", System.DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            a.Add("--backup-dir"); a.Add(dated);
+        }
+        else
+        {
+            a.Add("--no-backup");
+        }
 
         return a;
     }

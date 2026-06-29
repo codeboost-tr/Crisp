@@ -43,15 +43,19 @@ public partial class ModelStore : ObservableObject
     public string? ReadyModelPath => IsReady ? ModelPath : null;
     public string SizeText => _spec.ApproxSizeText;
 
-    /// Recompute state from disk. Hashes a present file to confirm it's intact;
+    /// Recompute state from disk. Hashes a present file to confirm it's intact; a
+    /// complete-but-wrong file is removed (so it can't linger / re-hash every launch),
     /// a missing/partial/corrupt file resolves to Absent.
     public async Task RefreshAsync()
     {
         if (IsBusy && State != ModelState.Checking) return; // a download owns the state
         State = ModelState.Checking;
-        State = File.Exists(ModelPath) && await VerifyAsync(ModelPath, CancellationToken.None)
-            ? ModelState.Ready
-            : ModelState.Absent;
+        if (File.Exists(ModelPath))
+        {
+            if (await VerifyAsync(ModelPath, CancellationToken.None)) { State = ModelState.Ready; return; }
+            TryDelete(ModelPath); // mismatched → remove, next launch resolves Absent instantly
+        }
+        State = ModelState.Absent;
     }
 
     public void Cancel() => _cts?.Cancel(); // keeps the .part for resume
@@ -68,32 +72,59 @@ public partial class ModelStore : ObservableObject
         {
             State = ModelState.Downloading;
             Progress = 0;
+
+            // A leftover .part that's already full-size (e.g. quit during verify) — verify
+            // and publish it, never request a range at/past EOF (HF answers that with 416).
+            if (File.Exists(PartPath) && new FileInfo(PartPath).Length >= _spec.ApproxBytes)
+            {
+                State = ModelState.Verifying;
+                if (await VerifyAsync(PartPath, ct)) { Publish(); return; }
+                TryDelete(PartPath); // wrong content/size → start clean
+                State = ModelState.Downloading;
+            }
+
             await StreamToPartAsync(ct);
 
             State = ModelState.Verifying;
             if (!await VerifyAsync(PartPath, ct))
             {
-                File.Delete(PartPath); // corrupt — don't resume onto bad bytes
+                TryDelete(PartPath); // corrupt — don't resume onto bad bytes
                 Fail("Downloaded file failed verification. Please try again.");
                 return;
             }
-
-            File.Move(PartPath, ModelPath, overwrite: true); // atomic publish
-            State = ModelState.Ready;
+            Publish();
         }
         catch (OperationCanceledException) { State = ModelState.Absent; } // .part kept for resume
-        catch (Exception ex) { Fail(ex is HttpRequestException ? "Download failed. Check your connection and try again." : ex.Message); }
+        catch (TimeoutException) { Fail("The download stalled. Please try again."); }
+        catch (HttpRequestException) { Fail("Download failed. Check your connection and try again."); }
+        catch (Exception ex) { Fail(ex.Message); }
         finally { _cts = null; }
     }
+
+    private void Publish()
+    {
+        File.Move(PartPath, ModelPath, overwrite: true); // atomic publish
+        State = ModelState.Ready;
+    }
+
+    private static void TryDelete(string path) { try { File.Delete(path); } catch { /* best effort */ } }
 
     private async Task StreamToPartAsync(CancellationToken ct)
     {
         long have = File.Exists(PartPath) ? new FileInfo(PartPath).Length : 0;
+        if (have >= _spec.ApproxBytes) { TryDelete(PartPath); have = 0; } // never range past EOF
 
         using var req = new HttpRequestMessage(HttpMethod.Get, _spec.Url);
         if (have > 0) req.Headers.Range = new RangeHeaderValue(have, null);
 
         using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        // A stale .part the server rejects as out-of-range → discard and restart from 0.
+        if (resp.StatusCode == System.Net.HttpStatusCode.RequestedRangeNotSatisfiable && have > 0)
+        {
+            TryDelete(PartPath);
+            await StreamToPartAsync(ct);
+            return;
+        }
         resp.EnsureSuccessStatusCode();
 
         // 206 → server honored the range, append; 200 → it ignored it, restart.
@@ -109,10 +140,19 @@ public partial class ModelStore : ObservableObject
 
         var buffer = new byte[81920];
         long received = have;
-        int read;
         var lastReport = 0L;
-        while ((read = await net.ReadAsync(buffer, ct)) > 0)
+        while (true)
         {
+            // 60s idle timeout: a stalled connection (bytes stop without the socket closing)
+            // fails instead of hanging on "Downloading…" forever — while still honoring cancel.
+            using var idle = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            idle.CancelAfter(TimeSpan.FromSeconds(60));
+            int read;
+            try { read = await net.ReadAsync(buffer, idle.Token); }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            { throw new TimeoutException("The download stalled."); }
+
+            if (read <= 0) break;
             await part.WriteAsync(buffer.AsMemory(0, read), ct);
             received += read;
             if (received - lastReport > 1_000_000) // throttle UI updates (~1 MB)

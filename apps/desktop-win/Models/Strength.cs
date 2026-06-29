@@ -38,12 +38,4 @@ public static class Strengths
         foreach (var p in All) if (p.Value == s) return p;
         return All[2]; // Aggressive
     }
-
-    /// The engine flags this strength implies (pauses-only knobs).
-    public static IEnumerable<string> ToArgs(Strength s)
-    {
-        var p = Of(s);
-        yield return "--pause"; yield return p.Pause.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        yield return "--keep-pause"; yield return p.KeepPause.ToString(System.Globalization.CultureInfo.InvariantCulture);
-    }
 }
