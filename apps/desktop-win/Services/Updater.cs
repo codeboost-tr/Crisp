@@ -93,7 +93,7 @@ public partial class Updater : ObservableObject
 
     private static async Task<string?> GetAsync(string url)
     {
-        var token = GithubToken();
+        var token = await GithubTokenAsync();
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         req.Headers.UserAgent.ParseAdd("Crisp-Windows");
@@ -126,7 +126,7 @@ public partial class Updater : ObservableObject
 
     /// `gh auth token` for the private repo (same as the Mac). Returns null if gh
     /// isn't installed/authed — the check then degrades to anonymous (public releases).
-    private static string? GithubToken()
+    private static async Task<string?> GithubTokenAsync()
     {
         foreach (var gh in new[] { "gh", "/opt/homebrew/bin/gh", "/usr/local/bin/gh" })
         {
@@ -143,9 +143,10 @@ public partial class Updater : ObservableObject
                 // actually enforce the 10s bound — ReadToEnd() alone ignores WaitForExit's timeout.
                 var stdoutTask = p.StandardOutput.ReadToEndAsync();
                 var stderrTask = p.StandardError.ReadToEndAsync();
-                if (!p.WaitForExit(10_000)) { try { p.Kill(true); } catch { /* ignore */ } continue; }
-                var token = stdoutTask.GetAwaiter().GetResult().Trim();
-                _ = stderrTask.GetAwaiter().GetResult();
+                using var cts = new System.Threading.CancellationTokenSource(10_000);
+                try { await p.WaitForExitAsync(cts.Token); } catch (System.OperationCanceledException) { try { p.Kill(true); } catch { /* ignore */ } continue; }
+                var token = (await stdoutTask).Trim();
+                _ = await stderrTask;
                 if (p.ExitCode == 0 && token.Length > 0) return token;
             }
             catch { /* try next candidate */ }

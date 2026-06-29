@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using Crisp.ViewModels;
 
 namespace Crisp.Services;
 
@@ -10,7 +12,6 @@ namespace Crisp.Services;
 /// queued, see App.OnFrameworkInitializationCompleted). No-op off Windows.
 public static class ShellIntegration
 {
-    private static readonly string[] Extensions = { ".mp4", ".mov", ".mkv", ".m4v", ".webm", ".avi", ".ts", ".wmv" };
     private const string Verb = "CleanWithCrisp";
 
     private static string KeyFor(string ext) =>
@@ -19,14 +20,14 @@ public static class ShellIntegration
     public static bool IsInstalled()
     {
         if (!OperatingSystem.IsWindows()) return false;
-        return Reg("query", KeyFor(Extensions[0])) == 0;
+        return MainWindowViewModel.VideoExtensions.All(ext => Reg("query", KeyFor(ext)) == 0);
     }
 
     public static void Install()
     {
         if (!OperatingSystem.IsWindows()) return;
         var exe = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Crisp.exe");
-        foreach (var ext in Extensions)
+        foreach (var ext in MainWindowViewModel.VideoExtensions)
         {
             var key = KeyFor(ext);
             Reg("add", key, "/ve", "/d", "Clean with Crisp", "/f");
@@ -38,7 +39,7 @@ public static class ShellIntegration
     public static void Uninstall()
     {
         if (!OperatingSystem.IsWindows()) return;
-        foreach (var ext in Extensions)
+        foreach (var ext in MainWindowViewModel.VideoExtensions)
             Reg("delete", KeyFor(ext), "/f");
     }
 

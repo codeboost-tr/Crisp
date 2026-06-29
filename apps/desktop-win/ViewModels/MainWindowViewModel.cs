@@ -61,7 +61,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // Accepted video types (mirrors the Mac CleanRunner allow-list) — a dropped
     // non-video is ignored rather than queued and failed.
-    private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
+    public static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".mp4", ".mov", ".mkv", ".m4v", ".webm", ".avi", ".flv", ".ts",
         ".mpg", ".mpeg", ".wmv", ".m2ts", ".3gp", ".mts",

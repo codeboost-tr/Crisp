@@ -93,13 +93,11 @@ public sealed class EngineConfig
         {
             var cfg = JsonSerializer.Deserialize<EngineConfig>(File.ReadAllText(FilePath), Opts);
             if (cfg is not null) return cfg;
-            Quarantine(); // a top-level `null` is a corrupt file, not a fresh default
-            return new EngineConfig();
+            return new EngineConfig { LoadFailed = !Quarantine() };
         }
         catch (JsonException)
         {
-            Quarantine();
-            return new EngineConfig();
+            return new EngineConfig { LoadFailed = !Quarantine() };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -108,9 +106,10 @@ public sealed class EngineConfig
     }
 
     // Preserve a corrupt settings.json (rename to .corrupt) so its keys aren't lost.
-    private static void Quarantine()
+    // Returns true if successfully moved, false if locked/failed.
+    private static bool Quarantine()
     {
-        try { File.Move(FilePath, FilePath + ".corrupt", overwrite: true); } catch { /* best effort */ }
+        try { File.Move(FilePath, FilePath + ".corrupt", overwrite: true); return true; } catch { return false; }
     }
 
     /// Atomic write (temp + move), preserving unmodeled keys.
