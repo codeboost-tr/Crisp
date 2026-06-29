@@ -158,7 +158,12 @@
                 </StackPanel>
             </Border>
 
-            <Button Content="Done" Click="OnDone" Classes="accent" HorizontalAlignment="Right"/>
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Button Grid.Column="0" Content="Reveal log files" Click="OnRevealLogs"
+                        Background="Transparent" BorderThickness="0" Padding="0"
+                        Foreground="{DynamicResource CrispAccent}" VerticalAlignment="Center"/>
+                <Button Grid.Column="2" Content="Done" Click="OnDone" Classes="accent"/>
+            </Grid>
         </StackPanel>
     </ScrollViewer>
 </Window>

@@ -17,6 +17,10 @@ public partial class MainWindowViewModel : ViewModelBase
 {
     public ObservableCollection<QueueItem> Queue { get; } = new();
 
+    /// Raised when a batch finishes with at least one cleaned file — the window shows a
+    /// toast. Carries the summary line ("Cleaned N · saved X").
+    public event Action<string>? BatchCompleted;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
     private bool _hasItems;
@@ -237,6 +241,7 @@ public partial class MainWindowViewModel : ViewModelBase
             _cts = null;
             UpdateOverall();
             RefreshCounts();
+            if (DoneCount > 0) BatchCompleted?.Invoke(SummaryText);
         }
     }
 

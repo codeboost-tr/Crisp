@@ -1,8 +1,11 @@
+using System;
 using System.Linq;
 using Avalonia.Controls;
+using Avalonia.Controls.Notifications;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Crisp.ViewModels;
 
 namespace Crisp.Views;
@@ -10,6 +13,7 @@ namespace Crisp.Views;
 public partial class MainWindow : Window
 {
     private MainWindowViewModel? Vm => DataContext as MainWindowViewModel;
+    private WindowNotificationManager? _notifications;
 
     public MainWindow()
     {
@@ -40,6 +44,18 @@ public partial class MainWindow : Window
             .Select(p => p!);
         if (paths is not null) vm.AddFiles(paths);
     }
+
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        if (Vm is { } vm) { vm.BatchCompleted -= OnBatchCompleted; vm.BatchCompleted += OnBatchCompleted; }
+    }
+
+    private void OnBatchCompleted(string summary) => Dispatcher.UIThread.Post(() =>
+    {
+        _notifications ??= new WindowNotificationManager(this) { Position = NotificationPosition.BottomRight, MaxItems = 3 };
+        _notifications.Show(new Notification("Crisp", summary, NotificationType.Success));
+    });
 
     private void OnSettings(object? sender, RoutedEventArgs e)
     {

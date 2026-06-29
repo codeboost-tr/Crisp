@@ -73,8 +73,11 @@ sealed class Program
         vm.AddFiles(videos);
         Console.WriteLine($"toggles: fillers={vm.RemoveFillers} retakes={vm.RemoveRetakes} needsModel={vm.NeedsModel}");
         Console.WriteLine($"queued {vm.Queue.Count} file(s); pending={vm.PendingCount}; concurrency={vm.Settings.Concurrency}");
+        string? notified = null;
+        vm.BatchCompleted += s => notified = s;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         await vm.CleanAllCommand.ExecuteAsync(null);
+        Console.WriteLine($"notification: {notified ?? "(none)"}");
         sw.Stop();
         Console.WriteLine($"batch wall time: {sw.Elapsed.TotalSeconds:F1}s");
         var ok = true;

@@ -49,13 +49,13 @@ Legend: ✅ done · 🔜 remaining · 🟡 partial · ⛔ N/A on Windows (Apple-
 - 🔜 Preview player (play the cleaned output in-app)
 - 🔜 Review & edit cuts (waveform timeline, manual keep/cut)
 - 🔜 Cut preview (waveform of what will be removed)
-- 🔜 Notifications when a batch finishes
+- ✅ Notifications when a batch finishes (in-app toast; OS-level toast = follow-up)
 - 🔜 Tray / menu-bar quick-drop
 - 🔜 Explorer right-click "Clean with Crisp" (← macOS Quick Action)
 - 🔜 Restore original from backup
 - 🔜 Open in detected editor (← EditorDetector; today: reveal the project)
 - 🔜 What's New after an update
-- 🔜 Diagnostics: reveal the log file
+- ✅ Diagnostics: reveal the log file
 - 🔜 Channel system (stable/nightly/dev) — partial (`CrispVersion`)
 
 ## Shipping

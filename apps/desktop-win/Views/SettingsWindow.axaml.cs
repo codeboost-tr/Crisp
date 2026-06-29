@@ -12,6 +12,23 @@ public partial class SettingsWindow : Window
 
     private void OnDone(object? sender, RoutedEventArgs e) => Close();
 
+    private void OnRevealLogs(object? sender, RoutedEventArgs e)
+    {
+        var dir = System.IO.Path.Combine(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), ".crisp", "logs");
+        try
+        {
+            System.IO.Directory.CreateDirectory(dir);
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{dir}\"") { UseShellExecute = true });
+            else if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
+                System.Diagnostics.Process.Start("open", new[] { dir });
+            else
+                System.Diagnostics.Process.Start("xdg-open", new[] { dir });
+        }
+        catch { /* best effort */ }
+    }
+
     private async void OnPickWatchFolder(object? sender, RoutedEventArgs e)
     {
         try
