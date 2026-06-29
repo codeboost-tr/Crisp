@@ -155,6 +155,9 @@
                     </Grid>
                     <TextBlock Classes="lbl" FontSize="12" TextWrapping="Wrap"
                                Text="While Crisp is open, any new video dropped into this folder is queued and cleaned automatically."/>
+                    <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="lbl" Text="Add &quot;Clean with Crisp&quot; to the Explorer right-click menu"/>
+                        <ToggleSwitch Grid.Column="1" AutomationProperties.Name="Add Clean with Crisp to the Explorer right-click menu"
+                                      HorizontalAlignment="Right" IsChecked="{Binding ExplorerIntegration}"/></Grid>
                 </StackPanel>
             </Border>
 

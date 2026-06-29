@@ -51,7 +51,7 @@ Legend: ✅ done · 🔜 remaining · 🟡 partial · ⛔ N/A on Windows (Apple-
 - 🔜 Cut preview (waveform of what will be removed)
 - ✅ Notifications when a batch finishes (in-app toast; OS-level toast = follow-up)
 - ✅ Tray icon (menu: Open Crisp / Quit; click to show) — port of the menu-bar item
-- 🔜 Explorer right-click "Clean with Crisp" (← macOS Quick Action)
+- ✅ Explorer right-click "Clean with Crisp" (← macOS Quick Action) — registry verb via `reg.exe`, Settings toggle; registry behaviour is Windows-only (manual-test on Windows)
 - ✅ Backed-up original — captured + a "Backup" row button reveals the pristine copy
 - 🔜 Open in detected editor (← EditorDetector; today: reveal the project)
 - ✅ What's New after an update (release notes viewer)

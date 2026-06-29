@@ -58,6 +58,14 @@ sealed class Program
         if (args.Length >= 2 && args[0] == "--estimate-test")
             return RunEstimateTest(args[1]).GetAwaiter().GetResult();
 
+        // Headless shell-integration probe (no-op off Windows).
+        //   dotnet run -- --shell-test
+        if (args.Length >= 1 && args[0] == "--shell-test")
+        {
+            Console.WriteLine($"explorer integration: installed={Crisp.Services.ShellIntegration.IsInstalled()} (false expected off Windows)");
+            return 0;
+        }
+
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         return 0;
     }

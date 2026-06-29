@@ -48,6 +48,13 @@ public partial class EngineSettings : ObservableObject
     [ObservableProperty] private bool _watchEnabled;
     [ObservableProperty] private string _watchFolderPath = "";
 
+    /// Explorer right-click "Clean with Crisp" — lives in the registry, not settings.json.
+    public bool ExplorerIntegration
+    {
+        get => ShellIntegration.IsInstalled();
+        set { if (value) ShellIntegration.Install(); else ShellIntegration.Uninstall(); OnPropertyChanged(); }
+    }
+
     public IReadOnlyList<ModelSpec> ModelOptions => ModelCatalog.All;
     public ModelSpec SelectedModel
     {
