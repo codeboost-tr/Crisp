@@ -8,6 +8,7 @@ struct CrispApp: App {
     @State private var model = CleanModel()
     @State private var updater = Updater()
     @State private var modelStore = ModelStore()
+    @State private var licenseStore = LicenseStore()
     // The opt-in on-device filler model (Wren), downloaded separately from whisper.
     @State private var fillerModelStore = ModelStore(spec: FillerModelCatalog.wren)
     @State private var fillerUpdater = FillerModelUpdater()
@@ -26,9 +27,11 @@ struct CrispApp: App {
                         fillerModelStore: fillerModelStore, fillerUpdater: fillerUpdater,
                         settings: settings, watchAgent: watchAgent, onboarding: onboarding,
                         player: player, whatsNew: whatsNew)
+                .environment(licenseStore)
                 .task { logLaunch() }
                 .task { updater.checkOnLaunch() }
                 .task { await modelStore.refresh() }
+                .task { await licenseStore.refresh() }
                 .task {
                     if settings.fillerModelEnabled {
                         // Apply the persisted selection (the store inits to the default),
