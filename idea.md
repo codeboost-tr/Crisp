@@ -1,147 +1,41 @@
-# Crisp — feature ideas / roadmap
+# Crisp — roadmap
 
-Polish, speed, and stability ideas for the app. Grounded in the current
-architecture (SwiftUI app driving the stdlib Python engine). Sequenced by
-impact-per-effort. Living doc — add/reorder freely.
+The roadmap now lives in **GitHub Issues + a Project board**, not in this file.
+Track work there instead of hand-editing markdown.
 
----
+## Where to look
 
-## 🎨 Polish (premium feel)
+- **Board (what to do next):** https://github.com/users/rafay99-epic/projects/4
+  — grouped by **Priority**: `Now` → `Next` → `Backlog`.
+- **Issues:** https://github.com/rafay99-epic/Crisp/issues
 
-1. **Before/after preview of the *result*** — scrub/play the cleaned result (or A/B
-   against the original) *before* writing the file. The "hear it before you commit"
-   step. Reuses the review timeline + preview sheet + waveform. **Top polish pick.**
-2. **Keyboard-driven cut review** — in the review timeline: `J/K/L` to move between
-   cuts, `space` to toggle keep/remove, and a **"play across this cut"** button to
-   hear whether a join is clean. Pairs with the smooth-cuts work.
-3. **Re-weight the progress bar** — fix the "rockets to ~60% then crawls": give the
-   encode phase a bigger share so the bar tracks wall-clock. Small (stage labels
-   already exist).
+## Conventions
 
-## ⚡ Speed (the cost is the re-encode, not the model)
+- **Priority labels:** `priority:now` (committed foundations), `priority:next`
+  (committed feature wave), `priority:backlog` (longer horizon).
+- **Area labels:** `area:licensing`, `area:platform`, `area:audio`, `area:video`,
+  `area:transcript`, `area:engine`, `area:ux`, `area:ml`, `area:reach`.
+- A PR that closes an item references it (`Closes #NN`) so the board auto-updates.
 
-4. **Smart-cut / stream-copy hybrid** — *the* speed lever. Copy the video stream
-   losslessly for the interior of each kept segment and only re-encode the few frames
-   at each cut boundary (GOP edges). Most of a video is copied, not encoded — often
-   5–10× faster on long videos. **Big effort** (GOP analysis, mixing copied +
-   re-encoded segments, muxing), highest speed payoff.
-5. **Cache the analysis between re-cleans** — re-cleaning the same file with only
-   encoder/quality changed re-extracts audio + re-detects every time. Cache that
-   (keyed by file + detection params) so encoder tweaks are instant. Cheap, safe.
+## Committed order (snapshot)
 
-## 🛟 Stability (what will actually bite real users)
+Foundations first, then the feature wave:
 
-6. ✅ **Done (PR #77).** **Variable-frame-rate (VFR) handling** — screen recorders
-   (the core use case!) often output VFR, and the trim→`setpts`→concat path can drift
-   A/V on VFR sources. Detect VFR (ffprobe) and normalize to CFR / handle timestamps
-   explicitly. **Top stability pick — latent correctness bug for the exact videos
-   Crisp targets.** Shipped: `crisp/framerate.py` policy + `tools.probe_video_fps` +
-   `render` `-r`; Settings → Output → Frame rate (Automatic / Keep source timing /
-   Constant rate).
-7. **Preflight checks** — before a long render: enough disk space for the output, a
-   valid video+audio stream, a decodable codec. Fail fast with a clear message
-   instead of dying mid-encode.
-8. **Graceful odd-input handling** — no-audio videos, corrupt/partial files, exotic
-   codecs → a clean error, never a crash or a half-written file.
+1. Licensing & paid tier via Polar.sh — #85
+2. Windows support (shared core + native UI) — #87
+3. Captions / subtitles export — #88
+4. Auto-reframe to vertical / short-form — #89
+5. "Studio sound" audio pass — #90
+6. Speaker diarization — #91
+7. Cut / chapter markers during the cut — #92
+8. Audio volume / gain control — #93
 
-## 🔁 Cross-cutting (polish + the model flywheel)
+Quick views:
 
-9. **Review-timeline feedback loop** — capture which predicted cuts the user keeps vs
-   removes → labeled data from real usage → feeds the next model. The "reward/treat"
-   idea done right (active learning, not RL). Both a UX win (the app learns your
-   taste) and the highest-leverage long-term data source. Already noted in
-   `research/NOTES.md` §6 as "data collection — later".
+```sh
+gh issue list --label priority:now      # the foundations
+gh issue list --label priority:next     # the feature wave
+```
 
-## 🌍 Reach (more audience, same engine)
-
-10. **Multi-language support** — the app is English-only today (whisper `en` model,
-    `is_filler` vocab, retake matching tuned on English). Offer multilingual whisper
-    models in the catalog and a language setting; pauses are already language-agnostic,
-    so the work is fillers/captions/retakes + the model catalog. Biggest pure-reach
-    expansion — opens Crisp to the global creator audience.
-11. **Audio-first / podcast mode** — accept an audio file (or "export audio only"),
-    run the same pauses + fillers + retakes pipeline, write a cleaned audio file. Same
-    engine, a whole new use case (podcasters) — mostly skipping the video render path.
-
-## 💎 Pro (justifies the paid tier)
-
-12. ✅ **Shipped (PR #79) — "Send to a video editor" (FCPXML, DaVinci Resolve).**
-    Instead of rendering, export the detected cuts as a *non-destructive timeline* the
-    user opens in DaVinci Resolve (free edition works — File ▸ Import ▸ Timeline; no
-    Studio scripting API needed). Crisp writes a `<name> (Crisp)/` folder = a copy of
-    the original + an `.fcpxml`. **Zero re-encode for CFR sources** (VFR is normalized to
-    CFR once, frame-accurately). Engine: `crisp/timeline.py` + `tools.probe_stream_meta`
-    + `pipeline._export_editor_project`; app: `EditorDetector`, Settings → Output → "Send
-    my cuts to a video editor", auto editor-picker sheet on finish. **Top pro pick.**
-    - **Open follow-ups (deferred — not blockers):**
-      - *Hard-cancel leftover:* a force-kill (SIGKILL) mid-copy can leave a partial
-        `(Crisp)` folder; we clean up on caught errors but can't on SIGKILL. Low impact
-        (original untouched; re-export overwrites). Could add a stale-partial sweep.
-      - *History project path:* an editor handoff records the `.fcpxml` path but not the
-        project folder, so History can't reveal the project after an app restart.
-      - *Presets drop fields:* `Preset.parameters()` rebuilds from defaults and only
-        carries cut/encode knobs — captions / frame-rate / smoothing / split fall back to
-        defaults (pre-existing; this PR only threaded the new `exportToEditor`). Worth
-        making presets capture the full recipe.
-    - **Auto-import spike — DONE: not feasible on free.** Measured on the
-      user's machine: their Resolve is the App Store **free/Lite, sandboxed** build, which
-      exposes **no "External scripting" preference at all** (Preferences search "script" →
-      "No Results Found"), so `scriptapp("Resolve")` returns `None` — external auto-import
-      can't be enabled. (`fusionscript.so` *does* load fine under Python 3.14, so that
-      worry was moot; the blocker is the free tier + sandbox.) Internal scripting exists
-      (Workspace ▸ Console/Scripts) but a sandboxed Resolve won't run an externally-dropped
-      script, and triggering one needs brittle UI automation. **True one-click auto-import
-      works only on Resolve Studio.**
-    - **Shipped instead — polished manual handoff (PR TBD).** On finish, the picker's
-      **Open** now launches the editor *and* reveals the `.fcpxml` in Finder (selected),
-      with a clear 2-step hint ("File ▸ Import ▸ Timeline → pick this"). One click, zero
-      fragility, works on free. `EditorDetector.openForImport(_:timeline:)`; same behavior
-      across the picker, the row button, and the context menu. A Studio-gated *real*
-      auto-import remains a future option if the user gets Studio.
-13. **Chapter detection + export** — auto-generate YouTube / podcast chapter markers
-    from long pauses + transcript topic shifts; export as chapter metadata or a
-    timestamp list. Reuses the existing transcript; concrete, visible creator value.
-
-## 🤝 Trust (build on what just shipped — retakes)
-
-14. **"Why was this cut?" inspector** — the engine already logs a reason per cut
-    (pause / filler / retake / long-run). Surface it in the review timeline with a
-    one-click *keep this one*, so the engine's decisions become something the user
-    understands and controls. Turns the retake/cut logic from a black box into trust;
-    pairs with #1/#2 and feeds #9.
-15. **Pause "tighten" vs. "remove"** — option to *shorten* long pauses to a target
-    (e.g. 0.3s) instead of cutting them entirely. Some creators find full removal too
-    staccato; a tighten mode keeps natural rhythm. A new keep-segment strategy in
-    `edit`, not a new detector.
-
-## 🛟 Stability (cont.)
-
-16. ✅ **Done (PR #80).** **Quit guard during render** — while any in-process clean is
-    rendering (a single file, a batch, or a menu-bar Quick Clean), Crisp **refuses to
-    quit or close** — ⌘Q, the Quit menu item, Dock ▸ Quit, logout/shutdown, the red
-    close button, and ⌘W are all blocked. Interrupting a re-encode mid-write is the one
-    way to hand the user a corrupt file (philosophy #2), so this is the floor everything
-    else stands on. The block lifts the instant the engine run returns — i.e. the moment
-    the output (cleaned file, or the editor handoff's copy + FCPXML) is safely on disk,
-    **even before** any handoff to an external editor. Quit shows a custom Crisp sheet
-    ("Crisp is still working… you can quit when it's done; force quit from Activity
-    Monitor to bail"), not the system's "quit anyway?" dialog (a windowless menu-bar
-    clean falls back to a standalone notice so the refusal is never silent); window close
-    greys out the red button + ⌘W natively. The escape hatch is intentional: Force Quit /
-    Activity Monitor (SIGKILL) is unvetoable. Engine: `App/QuitGuard.swift`
-    (`ProcessingGuard` + `AppDelegate.applicationShouldTerminate` + `.closable`
-    style-mask toggle via `MainWindowAttacher`); busy is read live from
-    `CleanModel.isRunning` / `QuickDropModel.isBusy` (single source of truth, no drift).
-    *Why a style mask and not `windowShouldClose`: SwiftUI owns the `Window` scene's
-    NSWindow delegate and re-installs its own, clobbering ours — verified — so the
-    delegate can't be relied on.*
-
----
-
-## Suggested sequence
-1. ✅ **VFR handling** (stability — protects screen recordings) — done, PR #77
-2. **Result preview + keyboard review** (polish — low risk)
-3. **Export to your editor / FCPXML** (pro — no re-encode, high value, low engine risk)
-4. **Multi-language** (reach — biggest audience expansion)
-5. **Smart-cut** (speed — big project)
-6. **Feedback loop** (the flywheel)
+> Shipped & pruned so far: VFR handling (PR #77), Export to editor / FCPXML
+> (PR #79), Quit guard during render (PR #80). See git history for the record.
