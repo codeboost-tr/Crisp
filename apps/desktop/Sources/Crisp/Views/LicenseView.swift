@@ -82,9 +82,12 @@ public struct LicenseView: View {
     }
     
     private func activate() {
+        let trimmedKey = licenseKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else { return }
+        
         isActivating = true
         Task {
-            await licenseStore.activate(key: licenseKey)
+            await licenseStore.activate(key: trimmedKey)
             isActivating = false
         }
     }

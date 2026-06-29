@@ -28,6 +28,14 @@ struct CrispApp: App {
                         settings: settings, watchAgent: watchAgent, onboarding: onboarding,
                         player: player, whatsNew: whatsNew)
                 .environment(licenseStore)
+                .sheet(isPresented: Binding(
+                    get: { !licenseStore.state.isUsable },
+                    set: { _ in }
+                )) {
+                    LicenseView()
+                        .environment(licenseStore)
+                        .interactiveDismissDisabled()
+                }
                 .task { logLaunch() }
                 .task { updater.checkOnLaunch() }
                 .task { await modelStore.refresh() }

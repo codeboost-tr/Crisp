@@ -23,10 +23,11 @@ public struct PolarLicenseValidationResponse: Decodable {
 public final class PolarAPIClient {
     public static let shared = PolarAPIClient()
     
-    private let baseURL = "https://api.polar.sh/api/v1"
+    private let baseURL = "https://api.polar.sh/v1"
     
-    // TODO: Replace with your actual Polar Organization ID
-    private let organizationId = "YOUR_ORG_ID_HERE"
+    private var organizationId: String {
+        return Bundle.main.object(forInfoDictionaryKey: "PolarOrganizationID") as? String ?? ""
+    }
     
     private init() {}
     
@@ -34,7 +35,7 @@ public final class PolarAPIClient {
     /// - Parameter key: The license key input by the user.
     /// - Returns: A `PolarLicenseValidationResponse` indicating the current status of the license.
     public func validate(key: String) async throws -> PolarLicenseValidationResponse {
-        guard let url = URL(string: "\(baseURL)/license-keys/validate") else {
+        guard let url = URL(string: "\(baseURL)/customer-portal/license-keys/validate") else {
             throw PolarAPIError.invalidURL
         }
         
@@ -43,7 +44,6 @@ public final class PolarAPIClient {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
-        // According to Polar API, the payload usually requires the organization ID and the key
         let payload: [String: String] = [
             "organization_id": organizationId,
             "key": key
@@ -71,7 +71,6 @@ public final class PolarAPIClient {
                 throw PolarAPIError.invalidResponse
             }
         } else {
-            // Handle error response from Polar (e.g., 400 Bad Request, 401 Unauthorized)
             if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let message = errorJson["detail"] as? String {
                 throw PolarAPIError.validationFailed(message)
