@@ -47,8 +47,8 @@ Legend: ✅ done · 🔜 remaining · 🟡 partial · ⛔ N/A on Windows (Apple-
 - ✅ Presets (named recipes a queue row can pick) — model + macOS-shared round-trip (`--preset-test`); Settings card (save current / make default / delete) + per-row picker in the queue
 - ✅ Savings estimate (pre-flight "≈ X saved" before cleaning)
 - 🟡 Preview player — "Play" opens the cleaned output in the system player (fully testable); embedded in-app player would need a native video dependency (LibVLCSharp) = follow-up
-- 🔜 Review & edit cuts (waveform timeline, manual keep/cut)
-- 🔜 Cut preview (waveform of what will be removed)
+- 🔜 Review & edit cuts (waveform timeline, manual keep/cut) — engine supports it (`--keep-file` renders an approved segment list); `WaveformView` is the foundation; interactive drag-edit is the remaining piece
+- ✅ Cut preview (waveform of what will be removed) — `WaveformView` draws `--analyze` peaks with removed pauses shaded red; "Preview cuts" button, live-updates as strength changes
 - ✅ Notifications when a batch finishes (in-app toast; OS-level toast = follow-up)
 - ✅ Tray icon (menu: Open Crisp / Quit; click to show) — port of the menu-bar item
 - ✅ Explorer right-click "Clean with Crisp" (← macOS Quick Action) — registry verb via `reg.exe`, Settings toggle; registry behaviour is Windows-only (manual-test on Windows)

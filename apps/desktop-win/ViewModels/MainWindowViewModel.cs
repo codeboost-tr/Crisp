@@ -46,6 +46,10 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(SelectedStrengthDetail))]
     private StrengthPreset _selectedStrength = Strengths.Of(Strength.Aggressive);
     public string SelectedStrengthDetail => SelectedStrength.Detail;
+    partial void OnSelectedStrengthChanged(StrengthPreset value)
+    {
+        if (_previewSilences is not null) RecomputeCutPreview(); // live update as strength changes
+    }
 
     public ModelStore Models { get; } = new();
     public EngineSettings Settings { get; } = new();
@@ -199,6 +203,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 && !Queue.Any(q => string.Equals(q.Path, p, StringComparison.OrdinalIgnoreCase)))
                 Queue.Add(new QueueItem(p) { PresetId = Settings.DefaultPresetId });
         EstimateText = ""; // queue changed → any estimate is stale
+        ClearCutPreview(); // …and the cut preview (it was for the previous first file)
     }
 
     [RelayCommand]
@@ -320,6 +325,66 @@ public partial class MainWindowViewModel : ViewModelBase
             + (failed > 0 ? " · some files couldn't be read" : "")
             + " · fillers & retakes counted while cleaning";
         IsEstimating = false;
+    }
+
+    // --- Cut preview (waveform of what will be removed) ---
+    [ObservableProperty] private CutPreview? _cutPreview;
+    [ObservableProperty] private bool _isPreviewingCuts;
+    // Cached analysis so dragging the strength recomputes cut regions without re-analyzing.
+    private double _previewDuration;
+    private List<double>? _previewPeaks;
+    private List<(double Start, double End)>? _previewSilences;
+
+    /// Analyze the first waiting file and show its waveform with the cut regions shaded
+    /// (pauses only — fillers/retakes need transcription). Reuses the engine `--analyze`.
+    [RelayCommand]
+    private async Task PreviewCuts()
+    {
+        var first = Queue.FirstOrDefault(q => q.Status == QueueStatus.Waiting);
+        if (first is null || IsPreviewingCuts || IsRunning) return;
+        IsPreviewingCuts = true;
+        try
+        {
+            var raw = await _engine.AnalyzeAsync(first.Path, CancellationToken.None);
+            if (raw is null) { CutPreview = null; return; }
+            using var doc = JsonDocument.Parse(raw);
+            var r = doc.RootElement;
+            _previewDuration = r.TryGetProperty("duration", out var d) ? d.GetDouble() : 0;
+            _previewPeaks = new List<double>();
+            if (r.TryGetProperty("peaks", out var pk) && pk.ValueKind == JsonValueKind.Array)
+                foreach (var v in pk.EnumerateArray()) _previewPeaks.Add(v.GetDouble());
+            _previewSilences = new List<(double, double)>();
+            if (r.TryGetProperty("silences", out var sil) && sil.ValueKind == JsonValueKind.Array)
+                foreach (var s in sil.EnumerateArray()) _previewSilences.Add((s[0].GetDouble(), s[1].GetDouble()));
+            RecomputeCutPreview();
+        }
+        catch (JsonException) { CutPreview = null; }
+        finally { IsPreviewingCuts = false; }
+    }
+
+    /// Rebuild the shaded cut ranges from the cached silences at the current strength —
+    /// a silence longer than the pause threshold is cut, keeping breathing room each side.
+    private void RecomputeCutPreview()
+    {
+        if (_previewPeaks is null || _previewSilences is null) return;
+        var custom = SelectedStrength.Value == Strength.Custom;
+        double pause = custom ? Settings.PauseThreshold : SelectedStrength.Pause;
+        double keep = custom ? Settings.BreathingRoom : SelectedStrength.KeepPause;
+        var removed = new List<CutRange>();
+        foreach (var (a, b) in _previewSilences)
+            if (b - a > pause)
+            {
+                double rs = a + keep, re = b - keep;
+                if (re > rs) removed.Add(new CutRange(rs, re));
+            }
+        CutPreview = new CutPreview { Duration = _previewDuration, Peaks = _previewPeaks, Removed = removed };
+    }
+
+    private void ClearCutPreview()
+    {
+        CutPreview = null;
+        _previewPeaks = null;
+        _previewSilences = null;
     }
 
     private async Task CleanItem(QueueItem item, CancellationToken ct)

@@ -103,15 +103,29 @@
                                 <CheckBox Content="Remove retakes" IsChecked="{Binding RemoveRetakes}" VerticalAlignment="Center"
                                           ToolTip.Tip="Remove a phrase you flubbed and immediately said again, keeping the corrected take."/>
                             </StackPanel>
-                            <Panel HorizontalAlignment="Left">
-                                <Button Content="Estimate savings" Command="{Binding EstimateCommand}"
+                            <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Left">
+                                <Panel>
+                                    <Button Content="Estimate savings" Command="{Binding EstimateCommand}"
+                                            Padding="0" Background="Transparent" BorderThickness="0"
+                                            Foreground="{DynamicResource CrispAccent}"
+                                            IsVisible="{Binding EstimateText, Converter={x:Static StringConverters.IsNullOrEmpty}}"/>
+                                    <TextBlock Classes="secondary" FontSize="12" Text="{Binding EstimateText}"
+                                               TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding EstimateText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                </Panel>
+                                <Button Content="Preview cuts" Command="{Binding PreviewCutsCommand}"
                                         Padding="0" Background="Transparent" BorderThickness="0"
                                         Foreground="{DynamicResource CrispAccent}"
-                                        IsVisible="{Binding EstimateText, Converter={x:Static StringConverters.IsNullOrEmpty}}"/>
-                                <TextBlock Classes="secondary" FontSize="12" Text="{Binding EstimateText}"
-                                           TextTrimming="CharacterEllipsis"
-                                           IsVisible="{Binding EstimateText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                            </Panel>
+                                        IsVisible="{Binding CutPreview, Converter={x:Static ObjectConverters.IsNull}}"/>
+                                <TextBlock Classes="secondary" FontSize="12" Text="Analyzing…"
+                                           IsVisible="{Binding IsPreviewingCuts}"/>
+                            </StackPanel>
+                            <!-- cut preview: waveform with removed ranges shaded red -->
+                            <StackPanel Spacing="3" IsVisible="{Binding CutPreview, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <controls:WaveformView Preview="{Binding CutPreview}" Height="46"/>
+                                <TextBlock Classes="secondary" FontSize="11"
+                                           Text="Red marks the pauses that will be removed — drag the strength to update."/>
+                            </StackPanel>
                         </StackPanel>
                         <!-- progress (running) -->
                         <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding IsRunning}">
