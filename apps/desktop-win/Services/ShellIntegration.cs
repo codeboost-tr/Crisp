@@ -10,7 +10,13 @@ namespace Crisp.Services;
 /// queued, see App.OnFrameworkInitializationCompleted). No-op off Windows.
 public static class ShellIntegration
 {
-    private static readonly string[] Extensions = { ".mp4", ".mov", ".mkv", ".m4v", ".webm", ".avi", ".ts", ".wmv" };
+    // Mirror MainWindowViewModel.VideoExtensions so the right-click menu matches what the
+    // app will actually accept.
+    private static readonly string[] Extensions =
+    {
+        ".mp4", ".mov", ".mkv", ".m4v", ".webm", ".avi", ".flv", ".ts",
+        ".mpg", ".mpeg", ".wmv", ".m2ts", ".3gp", ".mts",
+    };
     private const string Verb = "CleanWithCrisp";
 
     private static string KeyFor(string ext) =>

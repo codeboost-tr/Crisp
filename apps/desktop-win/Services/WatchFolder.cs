@@ -19,6 +19,7 @@ public sealed class WatchFolder : IDisposable
     private readonly HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase); // reported
     private readonly HashSet<string> _pending = new(StringComparer.OrdinalIgnoreCase); // stabilizing
     private FileSystemWatcher? _watcher;
+    private int _generation; // bumped on Stop()/restart so an in-flight callback can void itself
 
     public WatchFolder(Action<string> onVideo) => _onVideo = onVideo;
 
@@ -44,18 +45,23 @@ public sealed class WatchFolder : IDisposable
     private async void OnAppeared(string path)
     {
         if (!VideoExts.Contains(Path.GetExtension(path))) return;
+        int gen;
         lock (_seen)
         {
+            gen = _generation;
             if (_seen.Contains(path)) return;   // already reported
             if (!_pending.Add(path)) return;    // a stabilizer is already running for it
         }
         var ok = await WaitStableAsync(path);
+        bool report;
         lock (_seen)
         {
             _pending.Remove(path);
-            if (ok) _seen.Add(path); // only now is it "seen"; a failed wait can retry on the next event
+            // A Stop()/restart while we were stabilizing voids this callback.
+            report = ok && gen == _generation;
+            if (report) _seen.Add(path); // only now is it "seen"; a failed wait can retry on the next event
         }
-        if (ok) _onVideo(path);
+        if (report) _onVideo(path);
     }
 
     /// True once the file has stopped growing and can be opened for reading (i.e. the
@@ -93,7 +99,7 @@ public sealed class WatchFolder : IDisposable
             _watcher.Dispose();
             _watcher = null;
         }
-        lock (_seen) { _seen.Clear(); _pending.Clear(); }
+        lock (_seen) { _seen.Clear(); _pending.Clear(); _generation++; }
     }
 
     public void Dispose() => Stop();

@@ -122,7 +122,9 @@ public partial class Updater : ObservableObject
 
     private static async Task<string?> GetAsync(string url)
     {
-        var token = GithubToken();
+        // GithubToken() spawns `gh auth token` with a synchronous 10s bound; run it off the
+        // calling thread so a slow gh can't freeze startup (CheckAsync runs at launch).
+        var token = await Task.Run(GithubToken);
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         req.Headers.UserAgent.ParseAdd("Crisp-Windows");
