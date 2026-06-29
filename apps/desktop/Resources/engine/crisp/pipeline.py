@@ -432,9 +432,10 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
     # An editor handoff writes no captions (there's no rendered deliverable to attach
     # them to), so drop a caption request up front — before it would pull transcription
     # work that produces nothing. Fillers/retakes still transcribe as needed.
-    if export_timeline == "fcpxml" and captions != "none":
+    if export_timeline == "fcpxml" and (captions != "none" or burn_captions):
         on_log("Captions aren't written for an editor handoff — add them in your editor.")
         captions = "none"
+        burn_captions = False
     want_captions = captions != "none" or burn_captions
     # Retake detection needs a real transcript, which the Core ML classifier can't
     # produce. Rather than silently switch a classifier run onto whisper, the engine

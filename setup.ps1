@@ -11,13 +11,13 @@ $MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-bas
 
 Write-Host "=== Crisp — setup ==="
 
-Write-Host "→ Checking ffmpeg ..."
-if (!(Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
-    Write-Host "ffmpeg not found. Installing via winget..."
+Write-Host "→ Checking ffmpeg and ffprobe ..."
+if (!(Get-Command ffmpeg -ErrorAction SilentlyContinue) -or !(Get-Command ffprobe -ErrorAction SilentlyContinue)) {
+    Write-Host "ffmpeg or ffprobe not found. Installing via winget..."
     winget install --id=Gyan.FFmpeg -e --accept-source-agreements --accept-package-agreements
     Write-Host "ffmpeg installed. Please restart your terminal after this script finishes."
 } else {
-    Write-Host "ffmpeg is already installed."
+    Write-Host "ffmpeg and ffprobe are already installed."
 }
 
 Write-Host "→ Checking whisper.cpp ..."

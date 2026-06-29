@@ -415,8 +415,9 @@ struct SettingsView: View {
                         // Hard-disable captions: they need whisper (the fast model can't
                         // transcribe), so clear any caption setting rather than silently
                         // falling back to the speech model and bypassing the fast model.
-                        if settings.captionsFormat != "none" {
+                        if settings.captionsFormat != "none" || settings.burnCaptions {
                             settings.captionsFormat = "none"
+                            settings.burnCaptions = false
                             AppInfo.logger("model").info("captions cleared — unavailable with the fast filler model")
                         }
                         Task { await fillerModelStore.refresh() }
