@@ -207,6 +207,10 @@
                                         <TextBlock IsVisible="{Binding IsDone}" Classes="secondary" FontSize="11"
                                                    VerticalAlignment="Center"
                                                    Text="{Binding SavedText, StringFormat='removed {0}'}"/>
+                                        <Button IsVisible="{Binding CanOpenInEditor}"
+                                                Content="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).OpenInEditorLabel}"
+                                                Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).OpenInEditorCommand}"
+                                                CommandParameter="{Binding}" Classes="accent"/>
                                         <Button IsVisible="{Binding IsDone}" Content="Reveal"
                                                 Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).RevealCommand}"
                                                 CommandParameter="{Binding}"/>

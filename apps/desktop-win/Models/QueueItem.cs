@@ -41,6 +41,7 @@ public partial class QueueItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasBackup))]
     private string? _backupPath; // the backed-up pristine original, when one was kept
     [ObservableProperty] private bool _isEditorExport; // result is an editor project, not a render
+    [ObservableProperty] private bool _canOpenInEditor; // an editor was detected for the handoff
 
     public bool HasBackup => !string.IsNullOrEmpty(BackupPath);
     [ObservableProperty]

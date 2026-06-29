@@ -53,7 +53,7 @@ Legend: ✅ done · 🔜 remaining · 🟡 partial · ⛔ N/A on Windows (Apple-
 - ✅ Tray icon (menu: Open Crisp / Quit; click to show) — port of the menu-bar item
 - ✅ Explorer right-click "Clean with Crisp" (← macOS Quick Action) — registry verb via `reg.exe`, Settings toggle; registry behaviour is Windows-only (manual-test on Windows)
 - ✅ Backed-up original — captured + a "Backup" row button reveals the pristine copy
-- 🔜 Open in detected editor (← EditorDetector; today: reveal the project)
+- ✅ Open in detected editor — `EditorDetector` probes installed editors (Resolve/Premiere/Shotcut/Kdenlive on Win; Resolve/FCP on Mac); editor-export rows get an "Open in <editor>" button that launches it + reveals the project (`--editor-test`)
 - ✅ What's New after an update (release notes viewer)
 - ✅ Diagnostics: reveal the log file
 - ✅ Channel system (stable/nightly/dev) — `Channel` enum (CRISP_CHANNEL), isolated data homes (~/.crisp / -nightly / -dev), display name + header badge, dev has no updater, nightly tracks pre-releases (`--channel-test`)

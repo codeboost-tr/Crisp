@@ -399,6 +399,7 @@ public partial class MainWindowViewModel : ViewModelBase
             if (r.TryGetProperty("export_timeline", out var et) && et.GetString() == "fcpxml")
             {
                 item.IsEditorExport = true;
+                item.CanOpenInEditor = DetectedEditor is not null; // show "Open in <editor>" only if one exists
                 if (r.TryGetProperty("project_dir", out var pd) && pd.GetString() is { Length: > 0 } proj)
                     item.OutputPath = proj;
             }
@@ -449,6 +450,19 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [RelayCommand]
     private void CancelModel() => Models.Cancel();
+
+    // The detected editor for the handoff (first installed), resolved once at launch.
+    public VideoEditor? DetectedEditor { get; } = EditorDetector.First();
+    public string OpenInEditorLabel => DetectedEditor is { } e ? $"Open in {e.Name}" : "Open project";
+
+    /// Editor handoff: open the detected editor and reveal the project so the user does
+    /// the one manual File ▸ Import ▸ Timeline step (free editors can't auto-import).
+    [RelayCommand]
+    private void OpenInEditor(QueueItem item)
+    {
+        if (DetectedEditor is { } e) EditorDetector.Launch(e);
+        RevealInOS(item.OutputPath);
+    }
 
     [RelayCommand]
     private void Reveal(QueueItem item) => RevealInOS(item.OutputPath);

@@ -68,6 +68,16 @@ sealed class Program
         if (args.Length >= 1 && args[0] == "--channel-test")
             return RunChannelTest();
 
+        // Headless editor-detection probe (lists installed editors).
+        //   dotnet run -- --editor-test
+        if (args.Length >= 1 && args[0] == "--editor-test")
+        {
+            var editors = Crisp.Services.EditorDetector.Installed();
+            foreach (var ed in editors) Console.WriteLine($"  found: {ed.Name} → {ed.LaunchPath}");
+            Console.WriteLine($"editor-test: {editors.Count} editor(s) detected");
+            return 0;
+        }
+
         // Headless shell-integration probe (no-op off Windows).
         //   dotnet run -- --shell-test
         if (args.Length >= 1 && args[0] == "--shell-test")
