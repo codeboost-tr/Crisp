@@ -44,6 +44,11 @@ public sealed class EngineConfig
     public bool BackupOriginal { get; set; } = true;
     public int ManualConcurrency { get; set; } = 2; // how many files to clean at once
 
+    // Which speech model the engine loads for filler/retake detection.
+    [JsonPropertyName("selectedModelID")] public string SelectedModelId { get; set; } = "base.en";
+    // A user-supplied whisper .bin to use instead of a catalog model ("" = use catalog).
+    public string CustomModelPath { get; set; } = "";
+
     /// Every other key in the file (presets, watch, concurrency, model ids, …) —
     /// preserved verbatim on round-trip so the Windows app never drops them.
     [JsonExtensionData] public Dictionary<string, JsonElement> Extra { get; set; } = new();

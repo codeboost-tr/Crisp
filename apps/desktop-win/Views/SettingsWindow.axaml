@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:svc="using:Crisp.Services"
+        xmlns:models="using:Crisp.Models"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="460" d:DesignHeight="640"
@@ -88,6 +89,28 @@
                     </StackPanel>
                     <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="lbl" Text="Repeated-take sensitivity"/>
                         <ComboBox Grid.Column="1" AutomationProperties.Name="Repeated-take sensitivity" ItemsSource="{Binding RetakeSensitivities}" SelectedItem="{Binding RetakeSensitivity}"/></Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Speech model (filler / retake detection) -->
+            <Border Classes="card">
+                <StackPanel Spacing="10">
+                    <TextBlock Classes="head" Text="Speech model"/>
+                    <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="lbl" Text="Model"/>
+                        <ComboBox Grid.Column="1" AutomationProperties.Name="Speech model" MinWidth="200"
+                                  ItemsSource="{Binding ModelOptions}" SelectedItem="{Binding SelectedModel}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:ModelSpec">
+                                    <TextBlock Text="{Binding DisplayWithSize}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox></Grid>
+                    <TextBlock Classes="lbl" FontSize="12" TextWrapping="Wrap" Text="{Binding SelectedModel.Summary}"/>
+                    <StackPanel Spacing="4">
+                        <TextBlock Classes="lbl" FontSize="12" Text="Or use a custom whisper.cpp model (.bin):"/>
+                        <TextBox AutomationProperties.Name="Custom speech model path" PlaceholderText="Path to a .bin (leave empty to use the model above)"
+                                 Text="{Binding CustomModelPath}"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

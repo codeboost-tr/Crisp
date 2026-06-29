@@ -109,17 +109,18 @@ sealed class Program
 
     private static async Task<int> RunModelTest()
     {
+        Console.WriteLine("catalog: " + string.Join(", ",
+            Crisp.Models.ModelCatalog.All.Select(m => $"{m.Id} ({m.ApproxSizeText})")));
         var store = new Crisp.Services.ModelStore();
         Console.WriteLine($"models dir: {store.ModelsDir}");
         await store.RefreshAsync();
-        Console.WriteLine($"after refresh: state={store.State} ready={store.IsReady} path={store.ReadyModelPath}");
-        if (store.State == Crisp.Services.ModelState.Absent)
-        {
-            Console.WriteLine("absent → downloading…");
-            await store.DownloadAsync();
-            Console.WriteLine($"after download: state={store.State} msg={store.Message}");
-        }
-        return store.IsReady ? 0 : 1;
+        Console.WriteLine($"base:  spec={store.Spec.Id} size={store.SizeText} state={store.State} ready={store.IsReady}");
+
+        await store.UseAsync("large-v3-turbo"); // switch to the big model (likely Absent)
+        Console.WriteLine($"turbo: spec={store.Spec.Id} size={store.SizeText} state={store.State}");
+        var ok = store.Spec.Id == "large-v3-turbo" && store.SizeText == "574 MB";
+        Console.WriteLine($"switch -> {(ok ? "OK" : "FAIL")}");
+        return ok ? 0 : 1;
     }
 
     private static int RunSettingsTest()

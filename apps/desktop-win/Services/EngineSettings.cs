@@ -36,6 +36,20 @@ public partial class EngineSettings : ObservableObject
     [ObservableProperty] private bool _backupOriginal = true;
     [ObservableProperty] private int _maxParallel = 2; // clean up to N files at once
 
+    // Speech model: a catalog id (base.en / large-v3-turbo) or a user-supplied .bin path.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedModel))]
+    private string _selectedModelId = "base.en";
+    [ObservableProperty] private string _customModelPath = "";
+
+    public IReadOnlyList<ModelSpec> ModelOptions => ModelCatalog.All;
+    public ModelSpec SelectedModel
+    {
+        get => ModelCatalog.Spec(SelectedModelId);
+        set { if (value is not null) SelectedModelId = value.Id; }
+    }
+    public bool HasCustomModel => !string.IsNullOrWhiteSpace(CustomModelPath) && System.IO.File.Exists(CustomModelPath);
+
     /// Bounded parallelism for a batch clean (1–4), so heavy ffmpeg/whisper runs don't
     /// thrash a machine. Mirrors the Mac's manualConcurrency (the full ResourceGovernor
     /// auto/ultra modes aren't ported).
@@ -79,6 +93,8 @@ public partial class EngineSettings : ObservableObject
         RetakeSensitivity = _config.RetakeSensitivity;
         BackupOriginal = _config.BackupOriginal;
         MaxParallel = _config.ManualConcurrency;
+        SelectedModelId = _config.SelectedModelId;
+        CustomModelPath = _config.CustomModelPath;
         _loading = false;
     }
 
@@ -111,6 +127,8 @@ public partial class EngineSettings : ObservableObject
         _config.RetakeSensitivity = RetakeSensitivity;
         _config.BackupOriginal = BackupOriginal;
         _config.ManualConcurrency = MaxParallel;
+        _config.SelectedModelId = SelectedModelId;
+        _config.CustomModelPath = CustomModelPath;
         _config.Save();
     }
 

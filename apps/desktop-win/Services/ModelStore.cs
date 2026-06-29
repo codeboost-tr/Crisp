@@ -18,9 +18,13 @@ public enum ModelState { Checking, Ready, Absent, Downloading, Verifying, Failed
 /// resumable (HTTP Range), verified by hash, and published atomically.
 public partial class ModelStore : ObservableObject
 {
-    private readonly ModelSpec _spec = ModelCatalog.Base;
+    private ModelSpec _spec = ModelCatalog.Base;
     private static readonly HttpClient Http = new() { Timeout = Timeout.InfiniteTimeSpan };
     private CancellationTokenSource? _cts;
+
+    /// The catalog model this store currently tracks (the user's selection). Each model
+    /// has its own file, so switching just re-points and re-checks disk.
+    public ModelSpec Spec => _spec;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsReady), nameof(IsBusy))]
@@ -42,6 +46,20 @@ public partial class ModelStore : ObservableObject
     /// Absolute path the engine should load, or null until verified.
     public string? ReadyModelPath => IsReady ? ModelPath : null;
     public string SizeText => _spec.ApproxSizeText;
+    public string DisplayName => _spec.DisplayName;
+
+    /// Point the store at a different catalog model and recheck its state on disk.
+    /// No-op while a download is in flight.
+    public async Task UseAsync(string modelId)
+    {
+        var spec = ModelCatalog.Spec(modelId);
+        if (spec.Id == _spec.Id || State == ModelState.Downloading) return;
+        _spec = spec;
+        OnPropertyChanged(nameof(Spec));
+        OnPropertyChanged(nameof(SizeText));
+        OnPropertyChanged(nameof(DisplayName));
+        await RefreshAsync();
+    }
 
     /// Recompute state from disk. Hashes a present file to confirm it's intact; a
     /// complete-but-wrong file is removed (so it can't linger / re-hash every launch),

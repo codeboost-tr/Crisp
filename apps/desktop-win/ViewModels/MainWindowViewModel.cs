@@ -63,8 +63,13 @@ public partial class MainWindowViewModel : ViewModelBase
         ".mpg", ".mpeg", ".wmv", ".m2ts", ".3gp", ".mts",
     };
 
-    public bool NeedsModel => (RemoveFillers || RemoveRetakes) && !Models.IsReady;
+    // A user-supplied model satisfies the gate without any download.
+    public bool NeedsModel => (RemoveFillers || RemoveRetakes) && !Settings.HasCustomModel && !Models.IsReady;
     public bool CanClean => !NeedsModel;
+
+    /// The model path handed to the engine: a custom .bin if set, else the selected
+    /// catalog model once downloaded.
+    private string? ActiveModelPath => Settings.HasCustomModel ? Settings.CustomModelPath : Models.ReadyModelPath;
 
     // Bottom-bar mode: recipe shown when there are waiting files and we're idle.
     public int PendingCount => Queue.Count(q => q.Status == QueueStatus.Waiting);
@@ -91,8 +96,21 @@ public partial class MainWindowViewModel : ViewModelBase
                 CleanAllCommand.NotifyCanExecuteChanged();
             }
         };
+        // Track the user's selected model; switch + recheck when it (or the custom path) changes.
+        Settings.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(EngineSettings.SelectedModelId))
+                _ = Models.UseAsync(Settings.SelectedModelId);
+            if (e.PropertyName is nameof(EngineSettings.SelectedModelId) or nameof(EngineSettings.CustomModelPath))
+            {
+                OnPropertyChanged(nameof(NeedsModel));
+                OnPropertyChanged(nameof(CanClean));
+                CleanAllCommand.NotifyCanExecuteChanged();
+            }
+        };
         Queue.CollectionChanged += (_, _) => RefreshCounts();
-        _ = Models.RefreshAsync();
+        if (Settings.SelectedModelId != Models.Spec.Id) _ = Models.UseAsync(Settings.SelectedModelId);
+        else _ = Models.RefreshAsync();
         _ = Updater.CheckAsync(); // check for a newer release on launch (banner if found)
     }
 
@@ -224,7 +242,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var args = new List<string>(Settings.RecipeArgs(SelectedStrength.Value));
 
         // Both fillers and retakes need whisper to transcribe; pauses-only needs no model.
-        if ((RemoveFillers || RemoveRetakes) && Models.ReadyModelPath is { } modelPath)
+        if ((RemoveFillers || RemoveRetakes) && ActiveModelPath is { } modelPath)
         {
             args.Add("--model"); args.Add(modelPath);
             if (!RemoveFillers) { args.Add("--no-fillers"); }
