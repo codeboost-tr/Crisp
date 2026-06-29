@@ -1,205 +1,41 @@
-# Crisp — feature ideas / roadmap
+# Crisp — roadmap
 
-Polish, speed, and stability ideas for the app. Grounded in the current
-architecture (SwiftUI app driving the stdlib Python engine). Sequenced by
-impact-per-effort. Living doc — add/reorder freely.
+The roadmap now lives in **GitHub Issues + a Project board**, not in this file.
+Track work there instead of hand-editing markdown.
 
-> Shipped ideas are pruned from this list once they land. Most recent removals:
-> VFR handling (PR #77), Export to editor / FCPXML (PR #79), Quit guard during
-> render (PR #80). See git history for the full record.
+## Where to look
 
----
+- **Board (what to do next):** https://github.com/users/rafay99-epic/projects/4
+  — grouped by **Priority**: `Now` → `Next` → `Backlog`.
+- **Issues:** https://github.com/rafay99-epic/Crisp/issues
 
-## 🎯 Committed priority (locked order — June 2026)
+## Conventions
 
-Two **foundations** come before any new feature work:
+- **Priority labels:** `priority:now` (committed foundations), `priority:next`
+  (committed feature wave), `priority:backlog` (longer horizon).
+- **Area labels:** `area:licensing`, `area:platform`, `area:audio`, `area:video`,
+  `area:transcript`, `area:engine`, `area:ux`, `area:ml`, `area:reach`.
+- A PR that closes an item references it (`Closes #NN`) so the board auto-updates.
 
-1. **Licensing & paid tier — Polar.sh** (#22) — stand up the monetization layer.
-2. **Windows support** (#23) — shared Python core + a native Windows UI.
+## Committed order (snapshot)
 
-Then the next wave of features, in this order:
+Foundations first, then the feature wave:
 
-3. **Captions / subtitles export** (#15)
-4. **Auto-reframe to vertical / short-form** (#16)
-5. **"Studio sound" audio pass** (#19)
-6. **Speaker diarization** (#17)
-7. **Cut / chapter markers written during the cut** (#24)
-8. **Audio volume / gain control** (#25)
+1. Licensing & paid tier via Polar.sh — #85
+2. Windows support (shared core + native UI) — #87
+3. Captions / subtitles export — #88
+4. Auto-reframe to vertical / short-form — #89
+5. "Studio sound" audio pass — #90
+6. Speaker diarization — #91
+7. Cut / chapter markers during the cut — #92
+8. Audio volume / gain control — #93
 
-Everything else below stays in the backlog.
+Quick views:
 
----
+```sh
+gh issue list --label priority:now      # the foundations
+gh issue list --label priority:next     # the feature wave
+```
 
-## 🧱 Foundations (business & platform — do these first)
-
-22. **Licensing & paid tier — Polar.sh.** Gate a paid tier behind a license, using
-    **Polar.sh** as the Merchant of Record (it handles global sales tax / VAT and
-    payouts — important since the user is in Pakistan, where Stripe isn't available).
-    License activation / validation mirrors the existing `ModelStore` lifecycle: a
-    trial → license-key (or OAuth) gate, state derived from disk and re-checked at
-    launch, offline-tolerant. **Stay GPL-3.0** — the license gates the official builds
-    and convenience, not the source. Supersedes the earlier Lemon Squeezy plan.
-    **Do this first.**
-23. **Windows support.** Reuse the stdlib Python engine **as-is** — it already shells
-    out to ffmpeg / ffprobe / whisper.cpp, all of which ship Windows builds — and
-    build a **native Windows front-end** (e.g. WinUI 3 / Windows App SDK) that mirrors
-    the macOS app's UI/UX one-to-one. Port the cross-cutting pieces: the `Channel`
-    identity model, the GitHub-release updater, binary vendoring + signing, the
-    data-home / logs paths, and the shell integration (Explorer right-click / context
-    menu, the Shortcuts equivalent). One engine, two native shells. **Do this second.**
-
----
-
-## 🎨 Polish (premium feel)
-
-1. **Before/after preview of the *result*** — scrub/play the cleaned result (or A/B
-   against the original) *before* writing the file. The "hear it before you commit"
-   step. Reuses the review timeline + preview sheet + waveform.
-   - **Partially shipped:** the review timeline can skip-play the *enabled* cuts so
-     you experience the cleaned result without rendering (`ReviewModel.previewResult`).
-     **Still open:** a true A/B toggle against the original, and including
-     filler/retake cuts in the review (today it's pauses/structure cuts only).
-2. **Keyboard-driven cut review** — in the review timeline: `J/K/L` to move between
-   cuts, `space` to toggle keep/remove, and a **"play across this cut"** button to
-   hear whether a join is clean. Pairs with the smooth-cuts work.
-3. **Re-weight the progress bar** — fix the "rockets to ~60% then crawls": give the
-   encode phase a bigger share so the bar tracks wall-clock. Small (stage labels
-   already exist).
-
-## ⚡ Speed (the cost is the re-encode, not the model)
-
-4. **Smart-cut / stream-copy hybrid** — *the* speed lever. Copy the video stream
-   losslessly for the interior of each kept segment and only re-encode the few frames
-   at each cut boundary (GOP edges). Most of a video is copied, not encoded — often
-   5–10× faster on long videos. **Big effort** (GOP analysis, mixing copied +
-   re-encoded segments, muxing), highest speed payoff.
-5. **Cache the analysis between re-cleans** — re-cleaning the same file with only
-   encoder/quality changed re-extracts audio + re-detects every time. Cache that
-   (keyed by file + detection params) so encoder tweaks are instant. Cheap, safe.
-
-## 🛟 Stability (what will actually bite real users)
-
-6. **Preflight checks** — before a long render: enough disk space for the output, a
-   valid video+audio stream, a decodable codec. Fail fast with a clear message
-   instead of dying mid-encode.
-7. **Graceful odd-input handling** — no-audio videos, corrupt/partial files, exotic
-   codecs → a clean error, never a crash or a half-written file.
-   - **Partially shipped:** failures already raise human-readable `CleanError`s with
-     per-file isolation (a bad file doesn't kill the batch) and originals are never
-     touched. **Still open:** input-type-specific messaging (no-audio vs corrupt vs
-     exotic codec), stream-level preflight (see #6), and cleaning up a partial output
-     left beside the source on hard-cancel.
-
-## 🔁 Cross-cutting (polish + the model flywheel)
-
-8. **Review-timeline feedback loop** — capture which predicted cuts the user keeps vs
-   removes → labeled data from real usage → feeds the next model. The "reward/treat"
-   idea done right (active learning, not RL). Both a UX win (the app learns your
-   taste) and the highest-leverage long-term data source. Already noted in
-   `research/NOTES.md` §6 as "data collection — later".
-
-## 🌍 Reach (more audience, same engine)
-
-9. **Multi-language support** — the app is English-only today (whisper `en` model,
-   `is_filler` vocab, retake matching tuned on English). Offer multilingual whisper
-   models in the catalog and a language setting; pauses are already language-agnostic,
-   so the work is fillers/captions/retakes + the model catalog. Biggest pure-reach
-   expansion — opens Crisp to the global creator audience.
-10. **Audio-first / podcast mode** — accept an audio file (or "export audio only"),
-    run the same pauses + fillers + retakes pipeline, write a cleaned audio file. Same
-    engine, a whole new use case (podcasters) — mostly skipping the video render path.
-
-## 💎 Pro (justifies the paid tier)
-
-11. **Chapter detection + export** — auto-generate YouTube / podcast chapter markers
-    from long pauses + transcript topic shifts; export as chapter metadata or a
-    timestamp list. Reuses the existing transcript; concrete, visible creator value.
-    (See also #24 — markers written at cut points.)
-
-## 🤝 Trust (build on what just shipped — retakes)
-
-12. **"Why was this cut?" inspector** — the engine already logs a reason per cut
-    (pause / filler / retake / long-run). Surface it in the review timeline with a
-    one-click *keep this one*, so the engine's decisions become something the user
-    understands and controls. Turns the retake/cut logic from a black box into trust;
-    pairs with #1/#2 and feeds #8.
-    - **Partially shipped:** a per-cut *keep* control exists (`ReviewModel.toggleCut`,
-      tap-to-keep UI). **Still open:** carry the per-cut *reason* through to the UI
-      (`CutRegion` has no reason field today) and include filler/retake cuts in the
-      timeline.
-13. **Pause "tighten" vs. "remove"** — option to *shorten* long pauses to a target
-    (e.g. 0.3s) instead of cutting them entirely. Some creators find full removal too
-    staccato; a tighten mode keeps natural rhythm. A new keep-segment strategy in
-    `edit`, not a new detector.
-
----
-
-## 🚀 Big swings — transcript-era & creator features
-
-*Scoped to what the stack already makes cheap: whisper word-level timestamps, ffmpeg,
-the frame-accurate cut engine, and native macOS Vision / AVFoundation. Ordered roughly
-by coolness × leverage ÷ effort.*
-
-### Flagship (paid-tier definers)
-
-14. **Transcript-based editing (the Descript move).** Show the whisper transcript; the
-    user deletes words/sentences *in text* and Crisp cuts those spans from the video.
-    Turns Crisp from an auto-cleaner into an *editor* — the single biggest "wow." Word
-    timestamps + the frame-accurate cut engine already exist; the new work is a
-    transcript view ↔ timeline binding. **The killer paid feature.** Pairs with #1, #2,
-    #12.
-15. **Captions / subtitles export (`.srt` / `.vtt` + burned-in).** Nearly *free* —
-    transcription already runs and the words are currently discarded. Add sidecar
-    subtitle files plus an optional burned-in "open caption" style. Table-stakes creator
-    value at almost zero engine cost. Pairs perfectly with #9 (multi-language).
-    **→ Committed priority #3.**
-
-### Reach (new audiences, same engine)
-
-16. **Auto-reframe to vertical (Shorts / Reels / TikTok).** Use macOS **Vision** face
-    detection to keep the speaker centered, then ffmpeg-crop to 9:16. One horizontal
-    recording → a ready-to-post vertical. A reach bomb — opens the entire short-form
-    creator market with a native, no-dependency face tracker. **→ Committed priority #4.**
-17. **Speaker diarization** (whisper.cpp `tinydiarize`) — label who spoke when. Unlocks
-    interviews/podcasts and makes audio-first mode (#10) genuinely useful.
-    **→ Committed priority #6.**
-18. **Highlight / clip extraction** — use long pauses + transcript topic shifts (the same
-    signal as chapter detection #11) to auto-suggest 2–3 short clips from a long
-    recording. A "give me the highlights" button.
-
-### Premium polish (sounds / looks pro)
-
-19. **"Studio sound" audio pass.** ffmpeg `afftdn` / `arnndn` denoise + `loudnorm` to
-    **-14 LUFS** (YouTube's target) behind one toggle — audio that sounds mastered. Low
-    effort, high perceived quality; on-brand with "honest about quality."
-    **→ Committed priority #5.**
-20. **Auto-zoom / punch-in to mask jump cuts.** A subtle scale/crossfade after each cut
-    so joins don't feel jarring — mechanical jump-cuts start to look intentionally
-    edited. Pairs with #2 ("play across this cut") and the smooth-cuts work.
-21. **Speaking analytics / "filler report."** You already detect fillers, pauses, and
-    retakes — surface a post-clean card: WPM, filler density ("you said 'um' 47×"),
-    longest pause, talk time. Fun, shareable, and a coaching angle no one else in this
-    niche has.
-
----
-
-## 🎚️ Audio & markers
-
-24. **Cut / chapter markers written during the cut.** As Crisp makes each cut, drop a
-    marker at the join — exported as chapter metadata (mp4/mov), a sidecar timestamp
-    list, and editor markers in the FCPXML handoff — so cuts (and detected chapters,
-    #11) are visible and navigable in players and editors. Reuses the cut boundaries the
-    engine already computes. **→ Committed priority #7.**
-25. **Audio volume / gain control.** Let the user raise or lower the output volume — a
-    manual gain (dB) control via the ffmpeg `volume` filter, distinct from the automatic
-    loudness normalization in #19. Useful for quiet mics; pairs with the "studio sound"
-    pass and lives next to the encoder knobs in Settings. **→ Committed priority #8.**
-
----
-
-## Backlog (longer-horizon, after the committed priority above)
-- **Result preview + keyboard review** (#1 / #2 — polish, low risk)
-- **Multi-language** (#9 — biggest audience expansion; pairs with captions #15)
-- **Transcript-based editing** (#14 — flagship, larger build)
-- **Smart-cut** (#4 — big project, highest speed payoff)
-- **Feedback loop** (#8 — the flywheel)
+> Shipped & pruned so far: VFR handling (PR #77), Export to editor / FCPXML
+> (PR #79), Quit guard during render (PR #80). See git history for the record.
