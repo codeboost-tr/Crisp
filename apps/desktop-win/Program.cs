@@ -1,5 +1,8 @@
 ﻿using Avalonia;
 using System;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Crisp.Models;
@@ -29,6 +32,11 @@ sealed class Program
         //   dotnet run -- --queue-test <video1> <video2> …
         if (args.Length >= 2 && args[0] == "--queue-test")
             return RunQueueTest(args[1..]).GetAwaiter().GetResult();
+
+        // Headless settings check: load config, build recipe args, round-trip a save.
+        //   dotnet run -- --settings-test
+        if (args.Length >= 1 && args[0] == "--settings-test")
+            return RunSettingsTest();
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         return 0;
@@ -90,6 +98,30 @@ sealed class Program
             Console.WriteLine($"after download: state={store.State} msg={store.Message}");
         }
         return store.IsReady ? 0 : 1;
+    }
+
+    private static int RunSettingsTest()
+    {
+        // 1) Read the real config (proves the Mac settings.json schema loads).
+        var s = new Crisp.Services.EngineSettings();
+        Console.WriteLine($"loaded: codec={s.VideoCodec} hw={s.HardwareEncoding} quality={s.VideoQuality} " +
+                          $"container={s.OutputContainer} backup={s.BackupOriginal} pause={s.PauseThreshold}");
+        Console.WriteLine("recipe(Aggressive): " + string.Join(' ', s.RecipeArgs(Crisp.Models.Strength.Aggressive)));
+        Console.WriteLine("recipe(Custom):     " + string.Join(' ', s.RecipeArgs(Crisp.Models.Strength.Custom)));
+
+        // 2) Round-trip a save in a temp config dir (don't touch the real file).
+        var tmp = Path.Combine(Path.GetTempPath(), "crisp-settings-test");
+        Directory.CreateDirectory(tmp);
+        Environment.SetEnvironmentVariable("CRISP_CONFIG_DIR", tmp);
+        try { File.Delete(Crisp.Models.EngineConfig.FilePath); } catch { }
+        var cfg = Crisp.Models.EngineConfig.Load();
+        cfg.VideoCodec = "h264";
+        cfg.Extra["presets"] = JsonDocument.Parse("[]").RootElement.Clone();
+        cfg.Save();
+        var back = Crisp.Models.EngineConfig.Load();
+        var ok = back.VideoCodec == "h264" && back.Extra.ContainsKey("presets");
+        Console.WriteLine($"round-trip: codec={back.VideoCodec} extraPreserved={back.Extra.ContainsKey("presets")} -> {(ok ? "OK" : "FAIL")}");
+        return ok ? 0 : 1;
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.

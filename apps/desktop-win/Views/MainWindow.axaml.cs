@@ -41,6 +41,13 @@ public partial class MainWindow : Window
         if (paths is not null) vm.AddFiles(paths);
     }
 
+    private void OnSettings(object? sender, RoutedEventArgs e)
+    {
+        if (Vm is not { } vm) return;
+        // Shares the live EngineSettings instance — edits persist immediately.
+        new SettingsWindow { DataContext = vm.Settings }.ShowDialog(this);
+    }
+
     private async void OnBrowse(object? sender, RoutedEventArgs e)
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions

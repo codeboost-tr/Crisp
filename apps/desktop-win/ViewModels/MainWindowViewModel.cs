@@ -39,6 +39,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public string SelectedStrengthDetail => SelectedStrength.Detail;
 
     public ModelStore Models { get; } = new();
+    public EngineSettings Settings { get; } = new();
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NeedsModel), nameof(CanClean))]
     private bool _removeFillers;
@@ -167,7 +168,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private IReadOnlyList<string> BuildArgs()
     {
-        var args = new List<string>(Strengths.ToArgs(SelectedStrength.Value));
+        // The recipe (cutting + smoothing + encoding + backup + captions) comes from
+        // Settings; the VM only adds the filler/retake/model flags.
+        var args = new List<string>(Settings.RecipeArgs(SelectedStrength.Value));
         if (RemoveFillers && Models.ReadyModelPath is { } modelPath)
         {
             args.Add("--model"); args.Add(modelPath);
@@ -177,7 +180,6 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             args.Add("--no-fillers"); args.Add("--no-retakes");
         }
-        args.Add("--no-backup");
         return args;
     }
 
