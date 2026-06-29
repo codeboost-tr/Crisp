@@ -327,6 +327,43 @@ public partial class MainWindowViewModel : ViewModelBase
         IsEstimating = false;
     }
 
+    // --- Review & edit cuts ---
+    /// Build a review session for a row, seeded with the current strength's cut thresholds.
+    public ReviewModel CreateReview(QueueItem item)
+    {
+        var custom = SelectedStrength.Value == Strength.Custom;
+        double pause = custom ? Settings.PauseThreshold : SelectedStrength.Pause;
+        double keep = custom ? Settings.BreathingRoom : SelectedStrength.KeepPause;
+        return new ReviewModel(_engine, item, pause, keep);
+    }
+
+    /// Apply the reviewed cuts: write the keep-file onto the row and clean just it.
+    public async Task ApplyReviewAndCleanAsync(QueueItem item, ReviewModel review)
+    {
+        item.KeepFilePath = review.WriteKeepFile();
+        await CleanOneAsync(item);
+    }
+
+    /// Clean a single waiting row (used by the review flow); mirrors CleanAll for one item.
+    private async Task CleanOneAsync(QueueItem item)
+    {
+        if (IsRunning || item.Status != QueueStatus.Waiting) return;
+        IsRunning = true;
+        RefreshCounts();
+        _cts = new CancellationTokenSource();
+        try { await CleanItem(item, _cts.Token); }
+        catch (OperationCanceledException) { item.Status = QueueStatus.Cancelled; }
+        catch (Exception ex) { item.Status = QueueStatus.Failed; item.Error = LaunchError(ex); }
+        finally
+        {
+            IsRunning = false;
+            _cts = null;
+            UpdateOverall();
+            RefreshCounts();
+            if (DoneCount > 0) BatchCompleted?.Invoke(SummaryText);
+        }
+    }
+
     // --- Cut preview (waveform of what will be removed) ---
     [ObservableProperty] private CutPreview? _cutPreview;
     [ObservableProperty] private bool _isPreviewingCuts;
@@ -393,8 +430,9 @@ public partial class MainWindowViewModel : ViewModelBase
         item.Progress = 0;
         item.Stage = "Starting…";
         item.Error = null;
-        // Per-row recipe: a row's preset (if any) overrides the global recipe knobs.
-        var args = BuildArgs(Settings.PresetById(item.PresetId));
+        // Per-row recipe: a row's preset (if any) overrides the global recipe knobs; a
+        // reviewed row renders its approved keep-file instead of auto-detected cuts.
+        var args = BuildArgs(Settings.PresetById(item.PresetId), item.KeepFilePath);
         var progress = new Progress<EngineEvent>(ev => OnItemEvent(item, ev));
 
         var code = await _engine.RunAsync(item.Path, args, progress, ct);
@@ -405,12 +443,21 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private IReadOnlyList<string> BuildArgs(Preset? preset = null)
+    private IReadOnlyList<string> BuildArgs(Preset? preset = null, string? keepFile = null)
     {
         // The recipe (cutting + smoothing + encoding + backup + captions) comes from
         // Settings (or the row's preset, which overrides the recipe knobs); the VM only
         // adds the filler/retake/model flags.
         var args = new List<string>(Settings.RecipeArgs(SelectedStrength.Value, preset));
+
+        // Reviewed render: the engine renders exactly the approved keep segments and skips
+        // detection/transcription/model, so the encode flags above apply but the cutting/
+        // filler/retake flags don't matter.
+        if (keepFile is not null)
+        {
+            args.Add("--keep-file"); args.Add(keepFile);
+            return args;
+        }
 
         // Both fillers and retakes need whisper to transcribe; pauses-only needs no model.
         if ((RemoveFillers || RemoveRetakes) && ActiveModelPath is { } modelPath)

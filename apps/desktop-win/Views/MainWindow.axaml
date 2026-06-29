@@ -237,6 +237,8 @@
                                         <Button IsVisible="{Binding IsFailed}" Content="Retry"
                                                 Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).RetryCommand}"
                                                 CommandParameter="{Binding}"/>
+                                        <Button IsVisible="{Binding IsWaiting}" Content="Review"
+                                                ToolTip.Tip="Review &amp; edit the cuts before cleaning" Click="OnReview"/>
                                         <Button IsVisible="{Binding IsWaiting}" Content="✕"
                                                 AutomationProperties.Name="Remove from queue" ToolTip.Tip="Remove from queue"
                                                 Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).RemoveCommand}"

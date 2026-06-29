@@ -27,6 +27,10 @@ public partial class QueueItem : ObservableObject
     /// sets it; new files inherit the default preset.
     [ObservableProperty] private string _presetId = "";
 
+    /// When set (by the review editor), this row renders exactly the approved keep
+    /// segments via the engine's --keep-file instead of auto-detecting cuts.
+    public string? KeepFilePath { get; set; }
+
     [ObservableProperty] private double _progress;   // 0…1, this file alone
     [ObservableProperty] private string _stage = ""; // "Rendering video… 45%"
     [ObservableProperty]

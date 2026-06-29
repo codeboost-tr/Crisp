@@ -76,6 +76,16 @@ public partial class MainWindow : Window
         new HistoryWindow { DataContext = vm.History }.ShowDialog(this);
     }
 
+    private async void OnReview(object? sender, RoutedEventArgs e)
+    {
+        if (Vm is not { } vm || (sender as Control)?.DataContext is not Models.QueueItem item) return;
+        var review = vm.CreateReview(item);
+        var win = new ReviewWindow { DataContext = review };
+        _ = review.LoadAsync(); // analyze in the background; the window shows "Analyzing…"
+        var applied = await win.ShowDialog<bool>(this);
+        if (applied) await vm.ApplyReviewAndCleanAsync(item, review);
+    }
+
     private async void OnBrowse(object? sender, RoutedEventArgs e)
     {
         // async void: any exception here would crash the app, so swallow picker failures.
