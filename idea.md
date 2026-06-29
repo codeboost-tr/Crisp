@@ -93,8 +93,56 @@ impact-per-effort. Living doc — add/reorder freely.
 
 ---
 
+## 🚀 Big swings — transcript-era & creator features
+
+*Scoped to what the stack already makes cheap: whisper word-level timestamps, ffmpeg,
+the frame-accurate cut engine, and native macOS Vision / AVFoundation. Ordered roughly
+by coolness × leverage ÷ effort.*
+
+### Flagship (paid-tier definers)
+
+14. **Transcript-based editing (the Descript move).** Show the whisper transcript; the
+    user deletes words/sentences *in text* and Crisp cuts those spans from the video.
+    Turns Crisp from an auto-cleaner into an *editor* — the single biggest "wow." Word
+    timestamps + the frame-accurate cut engine already exist; the new work is a
+    transcript view ↔ timeline binding. **The killer paid feature.** Pairs with #1, #2,
+    #12.
+15. **Captions / subtitles export (`.srt` / `.vtt` + burned-in).** Nearly *free* —
+    transcription already runs and the words are currently discarded. Add sidecar
+    subtitle files plus an optional burned-in "open caption" style. Table-stakes creator
+    value at almost zero engine cost. Pairs perfectly with #9 (multi-language).
+
+### Reach (new audiences, same engine)
+
+16. **Auto-reframe to vertical (Shorts / Reels / TikTok).** Use macOS **Vision** face
+    detection to keep the speaker centered, then ffmpeg-crop to 9:16. One horizontal
+    recording → a ready-to-post vertical. A reach bomb — opens the entire short-form
+    creator market with a native, no-dependency face tracker.
+17. **Speaker diarization** (whisper.cpp `tinydiarize`) — label who spoke when. Unlocks
+    interviews/podcasts and makes audio-first mode (#10) genuinely useful.
+18. **Highlight / clip extraction** — use long pauses + transcript topic shifts (the same
+    signal as chapter detection #11) to auto-suggest 2–3 short clips from a long
+    recording. A "give me the highlights" button.
+
+### Premium polish (sounds / looks pro)
+
+19. **"Studio sound" audio pass.** ffmpeg `afftdn` / `arnndn` denoise + `loudnorm` to
+    **-14 LUFS** (YouTube's target) behind one toggle — audio that sounds mastered. Low
+    effort, high perceived quality; on-brand with "honest about quality."
+20. **Auto-zoom / punch-in to mask jump cuts.** A subtle scale/crossfade after each cut
+    so joins don't feel jarring — mechanical jump-cuts start to look intentionally
+    edited. Pairs with #2 ("play across this cut") and the smooth-cuts work.
+21. **Speaking analytics / "filler report."** You already detect fillers, pauses, and
+    retakes — surface a post-clean card: WPM, filler density ("you said 'um' 47×"),
+    longest pause, talk time. Fun, shareable, and a coaching angle no one else in this
+    niche has.
+
+---
+
 ## Suggested sequence
-1. **Result preview + keyboard review** (polish — low risk)
-2. **Multi-language** (reach — biggest audience expansion)
-3. **Smart-cut** (speed — big project)
-4. **Feedback loop** (the flywheel)
+1. **Captions / subtitles export** (#15 — almost free, ships fast)
+2. **Result preview + keyboard review** (#1 / #2 — polish, low risk)
+3. **Transcript-based editing** (#14 — the flagship)
+4. **Multi-language** (#9 — biggest audience expansion)
+5. **Smart-cut** (#4 — big project, highest speed payoff)
+6. **Feedback loop** (#8 — the flywheel)
