@@ -86,6 +86,8 @@
                         <TextBlock Classes="lbl" Text="{Binding MinKeep, StringFormat='Drop kept clips under {0:0.00}s'}"/>
                         <Slider Minimum="0" Maximum="0.5" Value="{Binding MinKeep}"/>
                     </StackPanel>
+                    <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="lbl" Text="Repeated-take sensitivity"/>
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding RetakeSensitivities}" SelectedItem="{Binding RetakeSensitivity}"/></Grid>
                 </StackPanel>
             </Border>
 

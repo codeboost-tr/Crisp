@@ -32,6 +32,7 @@ public partial class EngineSettings : ObservableObject
     [ObservableProperty] private string _frameRateMode = "auto";
     [ObservableProperty] private double _frameRateValue;
     [ObservableProperty] private string _captionsFormat = "none";
+    [ObservableProperty] private string _retakeSensitivity = "aggressive";
     [ObservableProperty] private bool _backupOriginal = true;
 
     // Choices for the Settings pickers.
@@ -42,6 +43,7 @@ public partial class EngineSettings : ObservableObject
     public string[] ColorDepths { get; } = { "auto", "8", "10" };
     public string[] FrameRateModes { get; } = { "auto", "passthrough", "constant" };
     public string[] CaptionFormats { get; } = { "none", "srt", "vtt", "both" };
+    public string[] RetakeSensitivities { get; } = { "gentle", "balanced", "aggressive" };
 
     private readonly EngineConfig _config;
     private bool _loading = true;
@@ -66,6 +68,7 @@ public partial class EngineSettings : ObservableObject
         FrameRateMode = _config.FrameRateMode;
         FrameRateValue = _config.FrameRateValue;
         CaptionsFormat = _config.CaptionsFormat;
+        RetakeSensitivity = _config.RetakeSensitivity;
         BackupOriginal = _config.BackupOriginal;
         _loading = false;
     }
@@ -95,6 +98,7 @@ public partial class EngineSettings : ObservableObject
         _config.FrameRateMode = FrameRateMode;
         _config.FrameRateValue = FrameRateValue;
         _config.CaptionsFormat = CaptionsFormat;
+        _config.RetakeSensitivity = RetakeSensitivity;
         _config.BackupOriginal = BackupOriginal;
         _config.Save();
     }

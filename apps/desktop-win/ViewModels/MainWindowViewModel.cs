@@ -45,6 +45,13 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(CleanAllCommand))]
     private bool _removeFillers;
 
+    // Repeated-take removal also needs the speech model (it transcribes to find a
+    // flubbed-then-repeated take), so it shares the model gate with fillers.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NeedsModel), nameof(CanClean))]
+    [NotifyCanExecuteChangedFor(nameof(CleanAllCommand))]
+    private bool _removeRetakes;
+
     // Accepted video types (mirrors the Mac CleanRunner allow-list) — a dropped
     // non-video is ignored rather than queued and failed.
     private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -53,7 +60,7 @@ public partial class MainWindowViewModel : ViewModelBase
         ".mpg", ".mpeg", ".wmv", ".m2ts", ".3gp", ".mts",
     };
 
-    public bool NeedsModel => RemoveFillers && !Models.IsReady;
+    public bool NeedsModel => (RemoveFillers || RemoveRetakes) && !Models.IsReady;
     public bool CanClean => !NeedsModel;
 
     // Bottom-bar mode: recipe shown when there are waiting files and we're idle.
@@ -196,10 +203,14 @@ public partial class MainWindowViewModel : ViewModelBase
         // The recipe (cutting + smoothing + encoding + backup + captions) comes from
         // Settings; the VM only adds the filler/retake/model flags.
         var args = new List<string>(Settings.RecipeArgs(SelectedStrength.Value));
-        if (RemoveFillers && Models.ReadyModelPath is { } modelPath)
+
+        // Both fillers and retakes need whisper to transcribe; pauses-only needs no model.
+        if ((RemoveFillers || RemoveRetakes) && Models.ReadyModelPath is { } modelPath)
         {
             args.Add("--model"); args.Add(modelPath);
-            args.Add("--no-retakes"); // retakes are a later iteration
+            if (!RemoveFillers) { args.Add("--no-fillers"); }
+            if (RemoveRetakes) { args.Add("--retake-sensitivity"); args.Add(Settings.RetakeSensitivity); }
+            else { args.Add("--no-retakes"); }
         }
         else
         {

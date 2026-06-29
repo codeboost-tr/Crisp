@@ -42,10 +42,14 @@ sealed class Program
         return 0;
     }
 
-    private static async Task<int> RunQueueTest(string[] videos)
+    private static async Task<int> RunQueueTest(string[] args)
     {
         var vm = new Crisp.ViewModels.MainWindowViewModel();
+        if (args.Contains("--fillers")) vm.RemoveFillers = true;
+        if (args.Contains("--retakes")) vm.RemoveRetakes = true;
+        var videos = args.Where(a => !a.StartsWith("--")).ToArray();
         vm.AddFiles(videos);
+        Console.WriteLine($"toggles: fillers={vm.RemoveFillers} retakes={vm.RemoveRetakes} needsModel={vm.NeedsModel}");
         Console.WriteLine($"queued {vm.Queue.Count} file(s); pending={vm.PendingCount}");
         await vm.CleanAllCommand.ExecuteAsync(null);
         var ok = true;

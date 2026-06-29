@@ -76,6 +76,8 @@
                                 </ComboBox>
                             </StackPanel>
                             <CheckBox Content="Remove fillers" IsChecked="{Binding RemoveFillers}" VerticalAlignment="Center"/>
+                            <CheckBox Content="Remove retakes" IsChecked="{Binding RemoveRetakes}" VerticalAlignment="Center"
+                                      ToolTip.Tip="Remove a phrase you flubbed and immediately said again, keeping the corrected take."/>
                         </StackPanel>
                         <!-- progress (running) -->
                         <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding IsRunning}">
