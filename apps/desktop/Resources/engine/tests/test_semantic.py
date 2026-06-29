@@ -113,7 +113,8 @@ class RunValidationTests(unittest.TestCase):
     """`_run` must reject malformed helper output by raising (so make_judge falls back)."""
 
     def tearDown(self):
-        self.fake.restore()
+        if getattr(self, "fake", None):  # a Windows-skipped _Fake never set it
+            self.fake.restore()
 
     def _run_one(self, body):
         self.fake = _Fake(body)
@@ -154,7 +155,8 @@ class JudgePathIntegrationTests(unittest.TestCase):
     does), not the in-process fake — so the production path itself is covered."""
 
     def tearDown(self):
-        self.fake.restore()
+        if getattr(self, "fake", None):  # a Windows-skipped _Fake never set it
+            self.fake.restore()
 
     def test_detect_retakes_with_real_judge_subprocess(self):
         self.fake = _Fake(_GOOD)                     # judge always returns 1.0
