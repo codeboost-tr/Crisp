@@ -16,6 +16,7 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
+    <Grid>
     <DockPanel LastChildFill="True">
 
         <!-- Header (always shown) -->
@@ -200,4 +201,23 @@
             </DockPanel>
         </Panel>
     </DockPanel>
+
+    <!-- Onboarding overlay — owns the window on first launch until "Get Started". -->
+    <Border IsVisible="{Binding Onboarding.IsPresented}" Background="{DynamicResource CrispWindowBg}">
+        <StackPanel Spacing="18" MaxWidth="440" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="32">
+            <controls:WaveformMark Height="52" HorizontalAlignment="Center"/>
+            <TextBlock Text="Welcome to Crisp" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock Classes="secondary" FontSize="14" HorizontalAlignment="Center" TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Text="Crisp tightens your screen recordings and talking-head videos — it removes long pauses and filler words and writes a clean cut. Your original is never touched."/>
+            <StackPanel Spacing="8" Margin="0,4">
+                <TextBlock Classes="secondary" Text="• Drop a video (or several) and hit Clean."/>
+                <TextBlock Classes="secondary" Text="• Pick how aggressively to cut in the bottom bar."/>
+                <TextBlock Classes="secondary" Text="• Turn on filler/retake removal to download the speech model."/>
+            </StackPanel>
+            <Button Content="Get Started" Command="{Binding FinishOnboardingCommand}" Classes="accent"
+                    HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Border>
+    </Grid>
 </Window>

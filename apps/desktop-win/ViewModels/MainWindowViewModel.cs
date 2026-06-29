@@ -42,6 +42,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public EngineSettings Settings { get; } = new();
     public Updater Updater { get; } = new();
     public HistoryStore History { get; } = new();
+    public OnboardingController Onboarding { get; } = new();
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NeedsModel), nameof(CanClean))]
     [NotifyCanExecuteChangedFor(nameof(CleanAllCommand))]
@@ -97,6 +98,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [RelayCommand]
     private void DownloadUpdate() => Updater.OpenDownload();
+
+    [RelayCommand]
+    private void FinishOnboarding() => Onboarding.Complete();
 
     private void RefreshCounts()
     {
