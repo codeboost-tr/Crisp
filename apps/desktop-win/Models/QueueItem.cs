@@ -20,7 +20,7 @@ public partial class QueueItem : ObservableObject
     }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsWaiting), nameof(IsRunning), nameof(IsDone), nameof(IsFailed))]
+    [NotifyPropertyChangedFor(nameof(IsWaiting), nameof(IsRunning), nameof(IsDone), nameof(IsFailed), nameof(IsPlayable))]
     private QueueStatus _status = QueueStatus.Waiting;
 
     /// Which preset this row cleans with (empty = the global recipe). A queue picker
@@ -40,7 +40,9 @@ public partial class QueueItem : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasBackup))]
     private string? _backupPath; // the backed-up pristine original, when one was kept
-    [ObservableProperty] private bool _isEditorExport; // result is an editor project, not a render
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPlayable))]
+    private bool _isEditorExport; // result is an editor project, not a render
     [ObservableProperty] private bool _canOpenInEditor; // an editor was detected for the handoff
 
     public bool HasBackup => !string.IsNullOrEmpty(BackupPath);
@@ -51,6 +53,8 @@ public partial class QueueItem : ObservableObject
     public bool IsWaiting => Status == QueueStatus.Waiting;
     public bool IsRunning => Status == QueueStatus.Running;
     public bool IsDone => Status == QueueStatus.Done;
+    /// A finished, rendered video (not an editor project) can be played in the system player.
+    public bool IsPlayable => IsDone && !IsEditorExport;
     public bool IsFailed => Status is QueueStatus.Failed or QueueStatus.Cancelled;
 
     /// 0…1 of the original duration that survived — drives the honest "cut" bar.

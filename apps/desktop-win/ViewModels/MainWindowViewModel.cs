@@ -481,6 +481,26 @@ public partial class MainWindowViewModel : ViewModelBase
                 RevealInOS(path);
     }
 
+    /// Play the cleaned output in the system's default video player. (Parity with the
+    /// macOS in-app preview; an embedded player would need a native video dependency.)
+    [RelayCommand]
+    private void Play(QueueItem item) => OpenInDefaultApp(item.OutputPath);
+
+    private static void OpenInDefaultApp(string? path)
+    {
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+        try
+        {
+            if (OperatingSystem.IsWindows())
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+            else if (OperatingSystem.IsMacOS())
+                System.Diagnostics.Process.Start("open", new[] { path });
+            else
+                System.Diagnostics.Process.Start("xdg-open", new[] { path });
+        }
+        catch { /* best effort */ }
+    }
+
     // Reveal a file (or a project folder, for editor exports) in the OS browser.
     private static void RevealInOS(string? path)
     {

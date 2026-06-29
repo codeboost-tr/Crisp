@@ -46,7 +46,7 @@ Legend: ✅ done · 🔜 remaining · 🟡 partial · ⛔ N/A on Windows (Apple-
 - ✅ Watch folder (auto-clean a folder) — in-app watcher; background-when-closed = Windows service follow-up
 - ✅ Presets (named recipes a queue row can pick) — model + macOS-shared round-trip (`--preset-test`); Settings card (save current / make default / delete) + per-row picker in the queue
 - ✅ Savings estimate (pre-flight "≈ X saved" before cleaning)
-- 🔜 Preview player (play the cleaned output in-app)
+- 🟡 Preview player — "Play" opens the cleaned output in the system player (fully testable); embedded in-app player would need a native video dependency (LibVLCSharp) = follow-up
 - 🔜 Review & edit cuts (waveform timeline, manual keep/cut)
 - 🔜 Cut preview (waveform of what will be removed)
 - ✅ Notifications when a batch finishes (in-app toast; OS-level toast = follow-up)
