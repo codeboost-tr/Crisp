@@ -45,6 +45,8 @@ public partial class EngineSettings : ObservableObject
     [ObservableProperty] private bool _splitTracks; // also write separate video + audio
     [ObservableProperty] private string _splitAudioFormat = "match";
     public string[] SplitAudioFormats { get; } = { "match", "wav" };
+    [ObservableProperty] private bool _watchEnabled;
+    [ObservableProperty] private string _watchFolderPath = "";
 
     public IReadOnlyList<ModelSpec> ModelOptions => ModelCatalog.All;
     public ModelSpec SelectedModel
@@ -102,6 +104,8 @@ public partial class EngineSettings : ObservableObject
         ExportToEditor = _config.ExportToEditor;
         SplitTracks = _config.SplitTracks;
         SplitAudioFormat = _config.SplitAudioFormat;
+        WatchEnabled = _config.WatchEnabled;
+        WatchFolderPath = _config.WatchFolderPath;
         _loading = false;
     }
 
@@ -139,6 +143,8 @@ public partial class EngineSettings : ObservableObject
         _config.ExportToEditor = ExportToEditor;
         _config.SplitTracks = SplitTracks;
         _config.SplitAudioFormat = SplitAudioFormat;
+        _config.WatchEnabled = WatchEnabled;
+        _config.WatchFolderPath = WatchFolderPath;
         _config.Save();
     }
 

@@ -54,6 +54,10 @@ public sealed class EngineConfig
     public bool SplitTracks { get; set; }
     public string SplitAudioFormat { get; set; } = "match"; // match | wav
 
+    // Watch folder: auto-queue new videos dropped into a folder while the app runs.
+    public bool WatchEnabled { get; set; }
+    public string WatchFolderPath { get; set; } = "";
+
     /// Every other key in the file (presets, watch, concurrency, model ids, …) —
     /// preserved verbatim on round-trip so the Windows app never drops them.
     [JsonExtensionData] public Dictionary<string, JsonElement> Extra { get; set; } = new();

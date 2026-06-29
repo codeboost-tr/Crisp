@@ -141,6 +141,23 @@
                 </StackPanel>
             </Border>
 
+            <!-- Watch folder -->
+            <Border Classes="card">
+                <StackPanel Spacing="10">
+                    <TextBlock Classes="head" Text="Watch folder"/>
+                    <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="lbl" Text="Auto-clean new videos in a folder"/>
+                        <ToggleSwitch Grid.Column="1" AutomationProperties.Name="Watch a folder and auto-clean new videos"
+                                      HorizontalAlignment="Right" IsChecked="{Binding WatchEnabled}"/></Grid>
+                    <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding WatchEnabled}">
+                        <TextBox Grid.Column="0" AutomationProperties.Name="Watch folder path"
+                                 PlaceholderText="Folder to watch…" Text="{Binding WatchFolderPath}"/>
+                        <Button Grid.Column="1" Content="Browse…" Click="OnPickWatchFolder" Margin="8,0,0,0"/>
+                    </Grid>
+                    <TextBlock Classes="lbl" FontSize="12" TextWrapping="Wrap"
+                               Text="While Crisp is open, any new video dropped into this folder is queued and cleaned automatically."/>
+                </StackPanel>
+            </Border>
+
             <Button Content="Done" Click="OnDone" Classes="accent" HorizontalAlignment="Right"/>
         </StackPanel>
     </ScrollViewer>

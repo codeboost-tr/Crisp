@@ -48,6 +48,11 @@ sealed class Program
         if (args.Length >= 1 && args[0] == "--history-test")
             return RunHistoryTest();
 
+        // Headless watch-folder check: drop a file in, confirm it's detected.
+        //   dotnet run -- --watch-test <a-video>
+        if (args.Length >= 2 && args[0] == "--watch-test")
+            return RunWatchTest(args[1]);
+
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         return 0;
     }
@@ -178,6 +183,21 @@ sealed class Program
         var ok = reloaded.Entries.Count == 2 && reloaded.Entries[0].InputName == "second.mp4"; // newest first
         Console.WriteLine($"history: persisted={reloaded.Entries.Count} newestFirst={reloaded.Entries[0].InputName} saved0={reloaded.Entries[0].SavedText} cuts0=[{reloaded.Entries[0].CutsText}] -> {(ok ? "OK" : "FAIL")}");
         return ok ? 0 : 1;
+    }
+
+    private static int RunWatchTest(string sampleVideo)
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), "crisp-watch-test");
+        try { if (Directory.Exists(tmp)) Directory.Delete(tmp, true); } catch { }
+        Directory.CreateDirectory(tmp);
+        var detected = new TaskCompletionSource<string>();
+        using var watch = new Crisp.Services.WatchFolder(p => detected.TrySetResult(p));
+        watch.Start(tmp);
+        File.Copy(sampleVideo, Path.Combine(tmp, "incoming.mp4"));
+        var got = detected.Task.Wait(TimeSpan.FromSeconds(20));
+        Console.WriteLine($"watch: detected={got} path={(got ? detected.Task.Result : "(none)")}");
+        try { Directory.Delete(tmp, true); } catch { }
+        return got && detected.Task.Result.EndsWith("incoming.mp4") ? 0 : 1;
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.

@@ -84,6 +84,7 @@ public partial class MainWindowViewModel : ViewModelBase
         : $"{DoneCount} done · {PendingCount} waiting";
 
     private readonly CrispEngine _engine;
+    private readonly WatchFolder _watch;
     private CancellationTokenSource? _cts;
 
     public MainWindowViewModel()
@@ -111,7 +112,11 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             if (e.PropertyName == nameof(EngineSettings.ExportToEditor))
                 OnPropertyChanged(nameof(CleanButtonLabel));
+            if (e.PropertyName is nameof(EngineSettings.WatchEnabled) or nameof(EngineSettings.WatchFolderPath))
+                ApplyWatchSettings();
         };
+        _watch = new WatchFolder(OnWatchedVideo);
+        ApplyWatchSettings();
         Queue.CollectionChanged += (_, _) => RefreshCounts();
         if (Settings.SelectedModelId != Models.Spec.Id) _ = Models.UseAsync(Settings.SelectedModelId);
         else _ = Models.RefreshAsync();
@@ -135,6 +140,25 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(CountLabel));
         OnPropertyChanged(nameof(SummaryText));
         CleanAllCommand.NotifyCanExecuteChanged();
+    }
+
+    private void ApplyWatchSettings()
+    {
+        if (Settings.WatchEnabled && Directory.Exists(Settings.WatchFolderPath))
+            _watch.Start(Settings.WatchFolderPath);
+        else
+            _watch.Stop();
+    }
+
+    /// A new video appeared in the watch folder (on a watcher thread) — queue it and,
+    /// if idle, start cleaning. Marshalled to the UI thread.
+    private void OnWatchedVideo(string path)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            AddFiles(new[] { path });
+            if (!IsRunning && CanCleanAll()) _ = CleanAllCommand.ExecuteAsync(null);
+        });
     }
 
     /// Append one or more videos as waiting rows (drag-drop / picker / open-with).
