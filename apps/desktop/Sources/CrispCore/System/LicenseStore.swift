@@ -191,14 +191,20 @@ public final class LicenseStore {
     
     private func saveKeyToKeychain(_ key: String) {
         let data = key.data(using: .utf8)!
-        let query: [String: Any] = [
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+        
+        let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: keychainAccount,
             kSecValueData as String: data
         ]
-        SecItemDelete(query as CFDictionary)
-        SecItemAdd(query as CFDictionary, nil)
+        SecItemAdd(addQuery as CFDictionary, nil)
     }
     
     private func loadKeyFromKeychain() -> String? {
