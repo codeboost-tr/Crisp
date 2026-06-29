@@ -112,8 +112,13 @@ public sealed class CrispEngine
         if (!string.IsNullOrEmpty(PythonPath)) return PythonPath!;
         var env = Environment.GetEnvironmentVariable("CRISP_PYTHON");
         if (!string.IsNullOrEmpty(env)) return env;
-        var bundled = Path.Combine(binDir, "python" + exe);
-        if (File.Exists(bundled)) return bundled;
+        // The vendored python-build-standalone runtime lands in a `python/` subdir with a
+        // platform-specific layout (Windows: python.exe at the root; Unix: bin/python3).
+        var candidates = OperatingSystem.IsWindows()
+            ? new[] { Path.Combine(binDir, "python.exe"), Path.Combine(binDir, "python", "python.exe") }
+            : new[] { Path.Combine(binDir, "python3"), Path.Combine(binDir, "python", "bin", "python3") };
+        foreach (var c in candidates)
+            if (File.Exists(c)) return c;
         return OperatingSystem.IsWindows() ? "python" : "python3";
     }
 

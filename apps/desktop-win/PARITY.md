@@ -62,7 +62,7 @@ Legend: ✅ done · 🔜 remaining · 🟡 partial · ⛔ N/A on Windows (Apple-
 ## Shipping
 - ✅ Cross-publish `win-x64` self-contained — `dotnet publish` produces Crisp.exe (verified from macOS + in CI)
 - ✅ CI `windows-latest` job (`windows.yml`: build + C# self-tests + shared-engine Python tests on real Windows + publish win-x64 artifact)
-- 🔜 Packaging: `vendor-win.ps1` (win64 ffmpeg/whisper/python, hash-pinned) + MSIX/installer + signing — needs verified Windows binary URLs/SHAs + a signing cert
+- 🟡 Packaging — `vendor-win.ps1` done (pinned + hash-checked win64 ffmpeg 8.1.2 + python-build-standalone 3.13.14 + whisper-cli from tag v1.9.0) + a `package` CI job that bundles a self-contained build (`engine/bin/`); `ResolvePython` finds the vendored runtime. Remaining: MSIX/installer + code signing (needs a signing cert)
 
 ## Deferred / N/A
 - ⛔ App Intents / Shortcuts (macOS); a CLI could substitute

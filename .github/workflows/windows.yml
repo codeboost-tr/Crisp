@@ -18,6 +18,7 @@ on:
       - "apps/desktop-win/**"
       - "apps/desktop/Resources/engine/**"
       - ".github/workflows/windows.yml"
+  workflow_dispatch: {} # run the heavy `package` job on demand (vendors binaries)
 
 permissions:
   contents: read
@@ -82,4 +83,40 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Crisp-win-x64
+          path: apps/desktop-win/publish
+
+  # Heavy: vendors the engine binaries (ffmpeg/whisper/python, pinned + hash-checked)
+  # and produces a fully self-contained bundle. Gated off per-PR runs (it downloads
+  # ffmpeg + builds whisper.cpp); runs on push to main/nightly or manual dispatch.
+  package:
+    name: Bundle self-contained (win-x64)
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/nightly'))
+    runs-on: windows-latest
+    needs: build
+    defaults:
+      run:
+        working-directory: apps/desktop-win
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Vendor engine binaries (ffmpeg/whisper/python, pinned)
+        run: pwsh Scripts/vendor-win.ps1
+
+      - name: Publish + bundle the engine and its binaries
+        run: |
+          dotnet publish Crisp.csproj -c Release -r win-x64 --self-contained -o publish
+          Copy-Item -Recurse -Force ../desktop/Resources/engine publish/engine
+          New-Item -ItemType Directory -Force -Path publish/engine/bin | Out-Null
+          Copy-Item -Recurse -Force .vendor/bin/* publish/engine/bin/
+
+      - name: Upload self-contained bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: Crisp-win-x64-bundle
           path: apps/desktop-win/publish
