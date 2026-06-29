@@ -43,6 +43,11 @@ sealed class Program
         if (args.Length >= 1 && args[0] == "--update-test")
             return RunUpdateTest();
 
+        // Headless history check: record → reload → verify (in a temp data dir).
+        //   dotnet run -- --history-test
+        if (args.Length >= 1 && args[0] == "--history-test")
+            return RunHistoryTest();
+
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         return 0;
     }
@@ -153,6 +158,23 @@ sealed class Program
         Console.WriteLine($"check: state={u.State} available={u.AvailableVersion} url={u.ReleaseUrl} msg={u.Message}");
         var compareOk = Updater.IsNewer("0.15", "0.14") && !Updater.IsNewer("0.14", "0.14") && !Updater.IsNewer("0.9", "0.10");
         return compareOk && u.State is UpdaterState.Available or UpdaterState.UpToDate ? 0 : 1;
+    }
+
+    private static int RunHistoryTest()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), "crisp-history-test");
+        Directory.CreateDirectory(tmp);
+        Environment.SetEnvironmentVariable("CRISP_DATA_DIR", tmp);
+        try { File.Delete(Path.Combine(tmp, "history.jsonl")); } catch { }
+
+        var store = new Crisp.Services.HistoryStore();
+        store.Record(new Crisp.Models.HistoryEntry { Date = new DateTime(2026, 6, 29, 10, 0, 0, DateTimeKind.Utc), InputPath = "/a/first.mp4", OutputPath = "/a/first_cleaned.mp4", SavedSeconds = 12, Pauses = 3 });
+        store.Record(new Crisp.Models.HistoryEntry { Date = new DateTime(2026, 6, 29, 11, 0, 0, DateTimeKind.Utc), InputPath = "/a/second.mp4", OutputPath = "/a/second_cleaned.mp4", SavedSeconds = 90, Fillers = 4, Retakes = 1 });
+
+        var reloaded = new Crisp.Services.HistoryStore(); // reads the file fresh
+        var ok = reloaded.Entries.Count == 2 && reloaded.Entries[0].InputName == "second.mp4"; // newest first
+        Console.WriteLine($"history: persisted={reloaded.Entries.Count} newestFirst={reloaded.Entries[0].InputName} saved0={reloaded.Entries[0].SavedText} cuts0=[{reloaded.Entries[0].CutsText}] -> {(ok ? "OK" : "FAIL")}");
+        return ok ? 0 : 1;
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.

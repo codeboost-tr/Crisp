@@ -29,12 +29,18 @@
                 <TextBlock Classes="secondary" FontSize="13"
                            Text="Remove pauses &amp; filler words from your recordings."/>
             </StackPanel>
-            <Button Grid.Column="2" Click="OnSettings" VerticalAlignment="Center" ToolTip.Tip="Settings"
-                    AutomationProperties.Name="Settings"
-                    Background="Transparent" BorderThickness="0" Padding="8">
-                <PathIcon Width="18" Height="18"
-                          Data="M11.07 2 c-.6 0-1.1.43-1.2 1.02 l-.24 1.4 a6 6 0 0 0-1.3.75 l-1.32-.53 a1.2 1.2 0 0 0-1.46.52 l-.93 1.6 a1.2 1.2 0 0 0 .26 1.53 l1.1.9 a6 6 0 0 0 0 1.5 l-1.1.9 a1.2 1.2 0 0 0-.26 1.53 l.93 1.6 a1.2 1.2 0 0 0 1.46.52 l1.32-.53 a6 6 0 0 0 1.3.75 l.24 1.4 a1.2 1.2 0 0 0 1.2 1.02 h1.86 a1.2 1.2 0 0 0 1.2-1.02 l.24-1.4 a6 6 0 0 0 1.3-.75 l1.32.53 a1.2 1.2 0 0 0 1.46-.52 l.93-1.6 a1.2 1.2 0 0 0-.26-1.53 l-1.1-.9 a6 6 0 0 0 0-1.5 l1.1-.9 a1.2 1.2 0 0 0 .26-1.53 l-.93-1.6 a1.2 1.2 0 0 0-1.46-.52 l-1.32.53 a6 6 0 0 0-1.3-.75 l-.24-1.4 A1.2 1.2 0 0 0 12.93 2 Z M12 8.5 a3.5 3.5 0 1 1 0 7 a3.5 3.5 0 0 1 0-7 Z"/>
-            </Button>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                <Button Click="OnHistory" ToolTip.Tip="History" AutomationProperties.Name="History"
+                        Background="Transparent" BorderThickness="0" Padding="8">
+                    <PathIcon Width="18" Height="18"
+                              Data="M12 3 a9 9 0 1 0 9 9 h-2 a7 7 0 1 1-2.05-4.95 L14 9 h6 V3 l-2.22 2.22 A9 9 0 0 0 12 3 Z M11 7 v6 l5 3 1-1.73-4.5-2.62 V7 Z"/>
+                </Button>
+                <Button Click="OnSettings" ToolTip.Tip="Settings" AutomationProperties.Name="Settings"
+                        Background="Transparent" BorderThickness="0" Padding="8">
+                    <PathIcon Width="18" Height="18"
+                              Data="M11.07 2 c-.6 0-1.1.43-1.2 1.02 l-.24 1.4 a6 6 0 0 0-1.3.75 l-1.32-.53 a1.2 1.2 0 0 0-1.46.52 l-.93 1.6 a1.2 1.2 0 0 0 .26 1.53 l1.1.9 a6 6 0 0 0 0 1.5 l-1.1.9 a1.2 1.2 0 0 0-.26 1.53 l.93 1.6 a1.2 1.2 0 0 0 1.46.52 l1.32-.53 a6 6 0 0 0 1.3.75 l.24 1.4 a1.2 1.2 0 0 0 1.2 1.02 h1.86 a1.2 1.2 0 0 0 1.2-1.02 l.24-1.4 a6 6 0 0 0 1.3-.75 l1.32.53 a1.2 1.2 0 0 0 1.46-.52 l.93-1.6 a1.2 1.2 0 0 0-.26-1.53 l-1.1-.9 a6 6 0 0 0 0-1.5 l1.1-.9 a1.2 1.2 0 0 0 .26-1.53 l-.93-1.6 a1.2 1.2 0 0 0-1.46-.52 l-1.32.53 a6 6 0 0 0-1.3-.75 l-.24-1.4 A1.2 1.2 0 0 0 12.93 2 Z M12 8.5 a3.5 3.5 0 1 1 0 7 a3.5 3.5 0 0 1 0-7 Z"/>
+                </Button>
+            </StackPanel>
         </Grid>
 
         <!-- Update banner (shown when a newer release is available) -->

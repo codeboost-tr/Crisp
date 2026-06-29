@@ -48,6 +48,13 @@ public partial class MainWindow : Window
         new SettingsWindow { DataContext = vm.Settings }.ShowDialog(this);
     }
 
+    private void OnHistory(object? sender, RoutedEventArgs e)
+    {
+        if (Vm is not { } vm) return;
+        vm.History.Reload();
+        new HistoryWindow { DataContext = vm.History }.ShowDialog(this);
+    }
+
     private async void OnBrowse(object? sender, RoutedEventArgs e)
     {
         // async void: any exception here would crash the app, so swallow picker failures.

@@ -28,6 +28,13 @@ public partial class App : Application
                 base.OnFrameworkInitializationCompleted();
                 return;
             }
+            // Dev: --history opens the History window (reads CRISP_DATA_DIR for screenshots).
+            if (desktop.Args?.Contains("--history") == true)
+            {
+                desktop.MainWindow = new HistoryWindow { DataContext = new Crisp.Services.HistoryStore() };
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
             var vm = new MainWindowViewModel();
             desktop.MainWindow = new MainWindow { DataContext = vm };
 

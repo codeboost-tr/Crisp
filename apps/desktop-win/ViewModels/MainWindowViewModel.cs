@@ -41,6 +41,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public ModelStore Models { get; } = new();
     public EngineSettings Settings { get; } = new();
     public Updater Updater { get; } = new();
+    public HistoryStore History { get; } = new();
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NeedsModel), nameof(CanClean))]
     [NotifyCanExecuteChangedFor(nameof(CleanAllCommand))]
@@ -272,6 +273,16 @@ public partial class MainWindowViewModel : ViewModelBase
             if (retakes > 0) parts.Add($"{retakes} retake{(retakes == 1 ? "" : "s")}");
             if (pauses > 0) parts.Add($"{pauses} pause{(pauses == 1 ? "" : "s")}");
             item.CutsSummary = parts.Count > 0 ? string.Join(" · ", parts) : "";
+
+            History.Record(new HistoryEntry
+            {
+                Date = DateTime.UtcNow,
+                InputPath = item.Path,
+                OutputPath = item.OutputPath ?? "",
+                OrigSeconds = item.OrigSeconds,
+                SavedSeconds = item.SavedSeconds,
+                Fillers = fillers, Pauses = pauses, Retakes = retakes,
+            });
         }
         catch (JsonException) { /* leave summary empty */ }
     }
