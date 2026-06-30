@@ -144,9 +144,9 @@ class BuildKeepSegmentsPauseModeTests(unittest.TestCase):
 
     def assertSegmentsAlmostEqual(self, actual, expected, places=10):
         self.assertEqual(len(actual), len(expected), f"length differ: {actual} vs {expected}")
-        for (a_s, a_e), (e_s, e_e) in zip(actual, expected):
-            self.assertAlmostEqual(a_s, e_s, places=places, msg=f"start")
-            self.assertAlmostEqual(a_e, e_e, places=places, msg=f"end")
+        for (a_s, a_e), (e_s, e_e) in zip(actual, expected, strict=True):
+            self.assertAlmostEqual(a_s, e_s, places=places, msg="start")
+            self.assertAlmostEqual(a_e, e_e, places=places, msg="end")
 
     def test_remove_mode_default_removes_entire_pause(self):
         keep, stats = build_keep_segments(
@@ -156,7 +156,7 @@ class BuildKeepSegmentsPauseModeTests(unittest.TestCase):
         self.assertEqual(stats["pauses"], 1)
 
     def test_remove_mode_explicit(self):
-        keep, stats = build_keep_segments(
+        keep, _stats = build_keep_segments(
             words=[], silences=[(3.0, 5.0)], duration=10.0,
             keep_pause=0.15, min_keep=0.05,
             pause_mode="remove", tight_pause=0.3)
@@ -195,14 +195,14 @@ class BuildKeepSegmentsPauseModeTests(unittest.TestCase):
         self.assertEqual(stats["pauses"], 1)
 
     def test_tight_pause_zero_is_same_as_remove(self):
-        keep, stats = build_keep_segments(
+        keep, _stats = build_keep_segments(
             words=[], silences=[(3.0, 5.0)], duration=10.0,
             keep_pause=0.15, min_keep=0.05,
             pause_mode="tighten", tight_pause=0.0)
         self.assertEqual(keep, [(0.0, 3.15), (4.85, 10.0)])
 
     def test_custom_pause_mode_unknown_defaults_to_remove(self):
-        keep, stats = build_keep_segments(
+        keep, _stats = build_keep_segments(
             words=[], silences=[(3.0, 5.0)], duration=10.0,
             keep_pause=0.15, min_keep=0.05,
             pause_mode="unknown_value")

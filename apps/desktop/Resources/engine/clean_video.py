@@ -71,7 +71,7 @@ def main():
                    help=f"drop kept fragments shorter than this many seconds (default {MIN_KEEP})")
     p.add_argument("--pause-mode", choices=["remove", "tighten"], default=DEFAULT_PAUSE_MODE,
                    help=f"how to treat detected pauses: 'remove' cuts them entirely, "
-                        f"'tighten' shortens them to --tight-pause seconds "
+                        f"'tighten' preserves a natural gap of keep_pause + tight_pause seconds "
                         f"(default {DEFAULT_PAUSE_MODE})")
     p.add_argument("--tight-pause", type=float, default=DEFAULT_TIGHT_PAUSE,
                    help=f"seconds of silence to preserve at a pause in tighten mode "

@@ -135,7 +135,7 @@ final class EngineSettings {
         // Clamp a hand-edited/unknown pause mode to the default so the Settings picker
         // always has a valid selection (and the engine a legal --pause-mode).
         pauseMode = PauseMode(rawValue: cfg.pauseMode)?.rawValue ?? EngineConfig.defaults.pauseMode
-        tightPause = cfg.tightPause
+        tightPause = min(max(cfg.tightPause, 0.05), 0.5)
         // Clamp a hand-edited/corrupt value to a known one, so the Settings picker
         // always has a valid selection and the engine never gets a bogus --captions.
         captionsFormat = CaptionFormat(rawValue: cfg.captionsFormat)?.rawValue

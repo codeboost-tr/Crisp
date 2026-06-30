@@ -24,6 +24,9 @@ public struct Preset: Identifiable, Codable, Equatable, Sendable {
     public var audioBitrateKbps: Int
     public var outputContainer: String
     public var colorDepth: String        // "auto" | "8" | "10" — output bit depth
+    // Pause handling (applied to every clean)
+    public var pauseMode: String               // "remove" | "tighten"
+    public var tightPause: Double              // seconds to keep in tighten mode
     // Output + backup
     public var outputDirectory: String
     public var backupOriginal: Bool
@@ -33,6 +36,7 @@ public struct Preset: Identifiable, Codable, Equatable, Sendable {
                 videoCodec: String, hardwareEncoding: Bool, videoQuality: String,
                 audioCodec: String, audioBitrateKbps: Int, outputContainer: String,
                 colorDepth: String = "auto",
+                pauseMode: String = "remove", tightPause: Double = 0.3,
                 outputDirectory: String, backupOriginal: Bool) {
         self.id = id
         self.name = name
@@ -48,6 +52,8 @@ public struct Preset: Identifiable, Codable, Equatable, Sendable {
         self.audioBitrateKbps = audioBitrateKbps
         self.outputContainer = outputContainer
         self.colorDepth = colorDepth
+        self.pauseMode = pauseMode
+        self.tightPause = tightPause
         self.outputDirectory = outputDirectory
         self.backupOriginal = backupOriginal
     }
@@ -70,7 +76,7 @@ public struct Preset: Identifiable, Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, name, strength, pauseThreshold, silenceFloorDB, breathingRoom, minKeep
         case videoCodec, hardwareEncoding, videoQuality, audioCodec, audioBitrateKbps
-        case outputContainer, colorDepth, outputDirectory, backupOriginal
+        case outputContainer, colorDepth, pauseMode, tightPause, outputDirectory, backupOriginal
     }
 
     public init(from decoder: Decoder) throws {
@@ -89,6 +95,8 @@ public struct Preset: Identifiable, Codable, Equatable, Sendable {
         audioBitrateKbps = try c.decode(Int.self, forKey: .audioBitrateKbps)
         outputContainer = try c.decode(String.self, forKey: .outputContainer)
         colorDepth = try c.decodeIfPresent(String.self, forKey: .colorDepth) ?? "auto"
+        pauseMode = try c.decodeIfPresent(String.self, forKey: .pauseMode) ?? "remove"
+        tightPause = try c.decodeIfPresent(Double.self, forKey: .tightPause) ?? 0.3
         outputDirectory = try c.decode(String.self, forKey: .outputDirectory)
         backupOriginal = try c.decode(Bool.self, forKey: .backupOriginal)
     }
@@ -102,6 +110,7 @@ public struct Preset: Identifiable, Codable, Equatable, Sendable {
                   videoQuality: config.videoQuality, audioCodec: config.audioCodec,
                   audioBitrateKbps: config.audioBitrateKbps, outputContainer: config.outputContainer,
                   colorDepth: config.colorDepth,
+                  pauseMode: config.pauseMode, tightPause: config.tightPause,
                   outputDirectory: config.outputDirectory, backupOriginal: config.backupOriginal)
     }
 
@@ -127,6 +136,8 @@ public struct Preset: Identifiable, Codable, Equatable, Sendable {
         cfg.audioBitrateKbps = audioBitrateKbps
         cfg.outputContainer = outputContainer
         cfg.colorDepth = colorDepth
+        cfg.pauseMode = pauseMode
+        cfg.tightPause = tightPause
         cfg.outputDirectory = outputDirectory
         cfg.backupOriginal = backupOriginal
         cfg.exportToEditor = exportToEditor
