@@ -244,11 +244,17 @@ sealed class Program
         var detected = new TaskCompletionSource<string>();
         using var watch = new Crisp.Services.WatchFolder(p => detected.TrySetResult(p));
         watch.Start(tmp);
+        // A cleaned output dropped in the watched folder must be IGNORED (no infinite
+        // re-clean cascade); a real input must be detected.
+        File.Copy(sampleVideo, Path.Combine(tmp, "already_cleaned.mp4"));
         File.Copy(sampleVideo, Path.Combine(tmp, "incoming.mp4"));
         var got = detected.Task.Wait(TimeSpan.FromSeconds(20));
-        Console.WriteLine($"watch: detected={got} path={(got ? detected.Task.Result : "(none)")}");
+        var path = got ? detected.Task.Result : "(none)";
+        // Pass only if a real input was detected AND the _cleaned file was never reported.
+        var ok = got && path.EndsWith("incoming.mp4") && !path.Contains("_cleaned");
+        Console.WriteLine($"watch: detected={got} path={path} -> {(ok ? "OK" : "FAIL")}");
         try { Directory.Delete(tmp, true); } catch { }
-        return got && detected.Task.Result.EndsWith("incoming.mp4") ? 0 : 1;
+        return ok ? 0 : 1;
     }
 
     private static int RunPresetTest()

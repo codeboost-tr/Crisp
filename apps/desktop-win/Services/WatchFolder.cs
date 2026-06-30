@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Crisp.Services;
@@ -37,9 +39,28 @@ public sealed class WatchFolder : IDisposable
         _watcher.Changed += (_, e) => OnAppeared(e.FullPath);
     }
 
+    // Crisp writes "<name>_cleaned.<ext>" (or "_cleaned_<n>") beside the source, which lands
+    // IN the watched folder — so the watcher must never treat its own output as new input,
+    // or it re-cleans forever. Mirrors macOS WatchController.isCleanableInput.
+    private static readonly Regex CleanedName = new(@"_cleaned(_\d+)?$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static bool IsOwnOutput(string path)
+    {
+        var stem = Path.GetFileNameWithoutExtension(path);
+        if (CleanedName.IsMatch(stem)) return true;           // it IS a cleaned output
+        try
+        {
+            // …or the input already has a cleaned sibling (don't re-clean what's done).
+            var dir = Path.GetDirectoryName(path);
+            return !string.IsNullOrEmpty(dir)
+                && Directory.EnumerateFiles(dir, stem + "_cleaned.*").Any();
+        }
+        catch { return false; }
+    }
+
     private async void OnAppeared(string path)
     {
-        if (!VideoTypes.IsVideo(path)) return;
+        if (!VideoTypes.IsVideo(path) || IsOwnOutput(path)) return;
         int gen;
         lock (_seen)
         {
