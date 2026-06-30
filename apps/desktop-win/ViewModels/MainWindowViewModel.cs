@@ -432,11 +432,23 @@ public partial class MainWindowViewModel : ViewModelBase
         var args = BuildArgs(Settings.PresetById(item.PresetId), item.KeepFilePath);
         var progress = new Progress<EngineEvent>(ev => OnItemEvent(item, ev));
 
-        var code = await _engine.RunAsync(item.Path, args, progress, ct);
-        if (item.Status == QueueStatus.Running)
+        try
         {
-            item.Status = code == 0 ? QueueStatus.Done : QueueStatus.Failed;
-            if (code != 0 && item.Error is null) item.Error = $"Engine exited {code}.";
+            var code = await _engine.RunAsync(item.Path, args, progress, ct);
+            if (item.Status == QueueStatus.Running)
+            {
+                item.Status = code == 0 ? QueueStatus.Done : QueueStatus.Failed;
+                if (code != 0 && item.Error is null) item.Error = $"Engine exited {code}.";
+            }
+        }
+        finally
+        {
+            // The reviewed keep-file is a one-shot temp; the engine has read it by now.
+            if (item.KeepFilePath is { } kf)
+            {
+                try { if (File.Exists(kf)) File.Delete(kf); } catch { /* best effort */ }
+                item.KeepFilePath = null;
+            }
         }
     }
 
