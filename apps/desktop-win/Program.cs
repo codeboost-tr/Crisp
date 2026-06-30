@@ -191,7 +191,7 @@ sealed class Program
         // A genuinely-unmodeled key (e.g. a macOS-only setting) must ride through
         // JsonExtensionData so the shared settings.json never loses the Mac app's keys.
         cfg.Extra["someMacOnlyKey"] = JsonDocument.Parse("true").RootElement.Clone();
-        cfg.Save();
+        cfg.TrySave();
         var back = Crisp.Models.EngineConfig.Load();
         var ok = back.VideoCodec == "h264" && back.Extra.ContainsKey("someMacOnlyKey");
         Console.WriteLine($"round-trip: codec={back.VideoCodec} extraPreserved={back.Extra.ContainsKey("someMacOnlyKey")} -> {(ok ? "OK" : "FAIL")}");
