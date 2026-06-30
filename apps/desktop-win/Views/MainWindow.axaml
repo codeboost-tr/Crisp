@@ -234,6 +234,8 @@
                                         <Button IsVisible="{Binding HasBackup}" Content="Backup" ToolTip.Tip="Show the backed-up original"
                                                 Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).RevealBackupCommand}"
                                                 CommandParameter="{Binding}"/>
+                                        <Button IsVisible="{Binding HasBackup}" Content="Restore" ToolTip.Tip="Copy the backed-up original to a folder you choose"
+                                                Click="OnRestore"/>
                                         <Button IsVisible="{Binding IsFailed}" Content="Retry"
                                                 Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).RetryCommand}"
                                                 CommandParameter="{Binding}"/>

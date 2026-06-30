@@ -81,6 +81,22 @@ public partial class MainWindow : Window
         new HistoryWindow { DataContext = vm.History }.ShowDialog(this);
     }
 
+    private async void OnRestore(object? sender, RoutedEventArgs e)
+    {
+        // async void: guard the whole body so a picker failure can't crash the app.
+        try
+        {
+            if (Vm is not { } vm || (sender as Control)?.DataContext is not Models.QueueItem item) return;
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = "Restore the original to…",
+                AllowMultiple = false,
+            });
+            if (folders.FirstOrDefault()?.TryGetLocalPath() is { } dir) vm.RestoreOriginal(item, dir);
+        }
+        catch { /* picker cancelled / copy failed — nothing to do */ }
+    }
+
     private async void OnReview(object? sender, RoutedEventArgs e)
     {
         // async void: an unhandled exception here would crash the app, so guard the whole body.

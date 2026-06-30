@@ -597,6 +597,19 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void RevealBackup(QueueItem item) => RevealInOS(item.BackupPath);
 
+    /// Copy the backed-up pristine original into a folder the user picked, never
+    /// overwriting (dedupe the name), then reveal it. Port of macOS Restore.restoreOriginal.
+    public void RestoreOriginal(QueueItem item, string destDir)
+    {
+        if (item.BackupPath is not { } backup || !File.Exists(backup) || !Directory.Exists(destDir)) return;
+        var name = Path.GetFileName(backup);
+        var target = Path.Combine(destDir, name);
+        for (var i = 1; File.Exists(target); i++)
+            target = Path.Combine(destDir, $"{Path.GetFileNameWithoutExtension(name)}_{i}{Path.GetExtension(name)}");
+        try { File.Copy(backup, target); RevealInOS(target); }
+        catch { /* best effort — never throws into the UI */ }
+    }
+
     [RelayCommand]
     private void RevealAll()
     {

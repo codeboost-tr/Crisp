@@ -48,18 +48,19 @@ jobs:
           python-version: "3.x"
 
       - name: Restore & build
-        run: dotnet build -c Release
+        run: dotnet build Crisp.sln -c Release
 
       # Headless self-tests (Program.cs --*-test modes) — the same checks run on the
       # dev's Mac. Each returns non-zero on failure, so a regression fails the job.
       - name: App self-tests
         run: |
-          dotnet run -c Release --no-build -- --preset-test
-          dotnet run -c Release --no-build -- --channel-test
-          dotnet run -c Release --no-build -- --editor-test
+          dotnet run --project Crisp.csproj -c Release --no-build -- --preset-test
+          dotnet run --project Crisp.csproj -c Release --no-build -- --channel-test
+          dotnet run --project Crisp.csproj -c Release --no-build -- --editor-test
+          dotnet run --project Crisp.csproj -c Release --no-build -- --review-test
           New-Item -ItemType File -Path sample.mp4 -Force | Out-Null
           Set-Content -Path sample.mp4 -Value ("x" * 4096)
-          dotnet run -c Release --no-build -- --watch-test sample.mp4
+          dotnet run --project Crisp.csproj -c Release --no-build -- --watch-test sample.mp4
 
       # The shared engine's OS-aware code (encoder selection + process-teardown guard)
       # validated on real Windows — these are fully platform-mocked, so they assert the
