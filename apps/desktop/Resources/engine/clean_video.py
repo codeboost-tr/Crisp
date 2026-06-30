@@ -110,6 +110,8 @@ def main():
                    help="target constant frame rate for --fps-mode=constant (e.g. 30, 60) "
                         "— required in that mode (0 is unset and errors). 'auto' ignores "
                         "this and uses the source's own rate")
+    p.add_argument("--audio-gain", type=float, default=0.0,
+                   help="manual gain (dB) to apply to the output audio (default 0.0)")
     p.add_argument("--export-timeline", choices=["none", "fcpxml"], default=DEFAULT_EXPORT_TIMELINE,
                    help="instead of rendering a video, write a non-destructive editor "
                         "project: a copy of the original (CFR sources copied as-is; "
@@ -253,7 +255,7 @@ def main():
                              out_dir=args.out_dir, split_tracks=args.split,
                              split_audio=args.split_audio, waveform_buckets=args.waveform,
                              keep_file=args.keep_file, captions=args.captions,
-                             burn_subtitles=args.burn_subtitles,
+                             burn_subtitles=args.burn_subtitles, audio_gain=args.audio_gain,
                              filler_backend=args.filler_backend, filler_model=args.filler_model,
                              fade_ms=args.fade_ms, crossfade_ms=args.crossfade_ms, snap_ms=args.snap_ms,
                              fps_mode=args.fps_mode, fps=args.fps,

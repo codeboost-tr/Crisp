@@ -60,6 +60,9 @@
                     <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="lbl" Text="Bitrate (kbps)"/>
                         <NumericUpDown Grid.Column="1" AutomationProperties.Name="Audio bitrate in kbps" HorizontalAlignment="Right" Width="140" Minimum="64" Maximum="512"
                                        Increment="32" Value="{Binding AudioBitrateKbps}"/></Grid>
+                    <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="lbl" Text="Audio gain (dB)"/>
+                        <NumericUpDown Grid.Column="1" AutomationProperties.Name="Audio gain in dB" HorizontalAlignment="Right" Width="140" Minimum="-30" Maximum="30"
+                                       Increment="1" Value="{Binding AudioGainDB}"/></Grid>
                     <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="lbl" Text="Captions"/>
                         <ComboBox Grid.Column="1" AutomationProperties.Name="Captions format" ItemsSource="{Binding CaptionFormats}" SelectedItem="{Binding CaptionsFormat}"/></Grid>
                 </StackPanel>

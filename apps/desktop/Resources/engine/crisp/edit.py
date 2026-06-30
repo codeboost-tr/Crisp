@@ -321,7 +321,7 @@ def output_duration(keep, crossfade=0.0):
     return total
 
 
-def build_filter_graph(keep, fade=0.0, crossfade=0.0, burn_subtitle_path=None):
+def build_filter_graph(keep, fade=0.0, crossfade=0.0, burn_subtitle_path=None, audio_gain=0.0):
     """The `-filter_complex_script` lines that trim `keep` (list of (start, end) secs)
     out of input 0 and join the pieces into `[outv][outa]`. Factored out of `render`
     so the cut-smoothing graph is pure and unit-testable (no ffmpeg needed).
@@ -353,10 +353,15 @@ def build_filter_graph(keep, fade=0.0, crossfade=0.0, burn_subtitle_path=None):
     if c <= 0.001 or n < 2:
         labels = "".join(f"[v{i}][a{i}]" for i in range(n))
         v_out = "pre_sub_v" if burn_subtitle_path else "outv"
-        lines.append(labels + f"concat=n={n}:v=1:a=1[{v_out}][outa]")
+        a_out = "pre_gain_a" if audio_gain != 0.0 else "outa"
+        lines.append(labels + f"concat=n={n}:v=1:a=1[{v_out}][{a_out}]")
+        
         if burn_subtitle_path:
             escaped_path = str(burn_subtitle_path).replace('\\', '/').replace(':', '\\:')
             lines.append(f"[{v_out}]subtitles='{escaped_path}'[outv]")
+            
+        if audio_gain != 0.0:
+            lines.append(f"[{a_out}]volume={audio_gain}dB[outa]")
         return lines
 
     # `length` is the accumulated output timeline so far = sum(durs[:i]) - (i-1)*c
@@ -365,29 +370,38 @@ def build_filter_graph(keep, fade=0.0, crossfade=0.0, burn_subtitle_path=None):
     for i in range(1, n):
         last = i == n - 1
         v_final_name = "pre_sub_v" if burn_subtitle_path else "outv"
-        ov, oa = (v_final_name, "outa") if last else (f"vx{i}", f"ax{i}")
+        a_final_name = "pre_gain_a" if audio_gain != 0.0 else "outa"
+        ov, oa = (v_final_name, a_final_name) if last else (f"vx{i}", f"ax{i}")
         offset = length - c
         lines.append(f"[{prev_v}][v{i}]xfade=transition=fade:duration={c:.6f}:offset={offset:.6f}[{ov}];")
         lines.append(f"[{prev_a}][a{i}]acrossfade=d={c:.6f}[{oa}]" + (";" if not last else ""))
         prev_v, prev_a, length = ov, oa, length + durs[i] - c
 
-    if burn_subtitle_path:
-        escaped_path = str(burn_subtitle_path).replace('\\', '/').replace(':', '\\:')
+    if burn_subtitle_path or audio_gain != 0.0:
         if not lines[-1].endswith(";"):
             lines[-1] += ";"
+            
+    if burn_subtitle_path:
+        escaped_path = str(burn_subtitle_path).replace('\\', '/').replace(':', '\\:')
         lines.append(f"[pre_sub_v]subtitles='{escaped_path}'[outv]")
+        
+    if audio_gain != 0.0:
+        if burn_subtitle_path and not lines[-1].endswith(";"):
+            lines[-1] += ";"
+        lines.append(f"[pre_gain_a]volume={audio_gain}dB[outa]")
+        
     return lines
 
 
 def render(src, keep, out_path, on_log, on_progress, video_opts, audio_opts, mux_opts=(),
-           fade=0.0, crossfade=0.0, fps=None, logger=None, burn_subtitle_path=None):
+           fade=0.0, crossfade=0.0, fps=None, logger=None, burn_subtitle_path=None, audio_gain=0.0):
     logger = logger or EngineLogger(None)
     on_log(f"Rendering cleaned video ({len(keep)} segments kept)...")
     # Progress denominator = the actual output length (a crossfade shortens it by
     # (n-1)*c), so out_time_* reaches 100% instead of stalling under it.
     total = output_duration(keep, crossfade) or 1.0
 
-    lines = build_filter_graph(keep, fade=fade, crossfade=crossfade, burn_subtitle_path=burn_subtitle_path)
+    lines = build_filter_graph(keep, fade=fade, crossfade=crossfade, burn_subtitle_path=burn_subtitle_path, audio_gain=audio_gain)
 
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tf:
         tf.write("\n".join(lines))

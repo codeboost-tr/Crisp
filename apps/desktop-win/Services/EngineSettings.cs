@@ -29,6 +29,7 @@ public partial class EngineSettings : ObservableObject
     [ObservableProperty] private string _videoQuality = "high";
     [ObservableProperty] private string _audioCodec = "aac";
     [ObservableProperty] private int _audioBitrateKbps = 192;
+    [ObservableProperty] private double _audioGainDB;
     [ObservableProperty] private string _outputContainer = "auto";
     [ObservableProperty] private string _colorDepth = "auto";
     [ObservableProperty] private string _frameRateMode = "auto";
@@ -151,6 +152,7 @@ public partial class EngineSettings : ObservableObject
         VideoQuality = _config.VideoQuality;
         AudioCodec = _config.AudioCodec;
         AudioBitrateKbps = _config.AudioBitrateKbps;
+        AudioGainDB = _config.AudioGainDB;
         OutputContainer = _config.OutputContainer;
         ColorDepth = _config.ColorDepth;
         FrameRateMode = _config.FrameRateMode;
@@ -193,6 +195,7 @@ public partial class EngineSettings : ObservableObject
         _config.VideoQuality = VideoQuality;
         _config.AudioCodec = AudioCodec;
         _config.AudioBitrateKbps = AudioBitrateKbps;
+        _config.AudioGainDB = AudioGainDB;
         _config.OutputContainer = OutputContainer;
         _config.ColorDepth = ColorDepth;
         _config.FrameRateMode = FrameRateMode;
@@ -250,6 +253,7 @@ public partial class EngineSettings : ObservableObject
         a.Add("--quality"); a.Add(preset?.VideoQuality ?? VideoQuality);
         a.Add("--audio-codec"); a.Add(preset?.AudioCodec ?? AudioCodec);
         a.Add("--audio-bitrate"); a.Add((preset?.AudioBitrateKbps ?? AudioBitrateKbps).ToString(CultureInfo.InvariantCulture));
+        if (AudioGainDB != 0.0) { a.Add("--audio-gain"); a.Add(F(AudioGainDB)); }
         a.Add("--container"); a.Add(preset?.OutputContainer ?? OutputContainer);
         a.Add("--color-depth"); a.Add(preset?.ColorDepth ?? ColorDepth);
         a.Add("--fps-mode"); a.Add(FrameRateMode);

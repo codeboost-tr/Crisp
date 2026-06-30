@@ -364,7 +364,7 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
                 remove_retakes=DEFAULT_REMOVE_RETAKES, backup=DEFAULT_BACKUP,
                 backup_dir=None, out_dir=None, split_tracks=False, split_audio="match",
                 waveform_buckets=0, keep_file=None, captions="none",
-                burn_subtitles=False,
+                burn_subtitles=False, audio_gain=0.0,
                 filler_backend="whisper", filler_model=None,
                 fade_ms=DEFAULT_FADE_MS, crossfade_ms=DEFAULT_CROSSFADE_MS, snap_ms=DEFAULT_SNAP_MS,
                 retake_sensitivity=DEFAULT_RETAKE_SENSITIVITY,
@@ -725,7 +725,7 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
             render(src, keep, out_path, on_log, stage(0.60, 1.0),
                    video_args(video_codec, hw, quality, pix, hdr_params=hdr_params) + color_flags,
                    audio, mux, fade=fade_s, crossfade=crossfade_s, fps=target_fps, logger=logger,
-                   burn_subtitle_path=burn_subtitle_path)
+                   burn_subtitle_path=burn_subtitle_path, audio_gain=audio_gain)
             # hdr_params is written only by libx265 on a deep (≥10-bit) encode (see
             # video_args), so claim preservation only when this attempt was exactly that —
             # never on a hardware attempt or the 8-bit fallback.
