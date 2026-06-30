@@ -20,7 +20,11 @@ public static class ShellIntegration
     public static bool IsInstalled()
     {
         if (!OperatingSystem.IsWindows()) return false;
-        return Reg("query", KeyFor(Extensions[0])) == 0;
+        // Installed only if the verb exists for every extension — a partial install (e.g.
+        // the list grew since last time) reports not-installed so the toggle re-registers all.
+        foreach (var ext in Extensions)
+            if (Reg("query", KeyFor(ext)) != 0) return false;
+        return true;
     }
 
     public static void Install()

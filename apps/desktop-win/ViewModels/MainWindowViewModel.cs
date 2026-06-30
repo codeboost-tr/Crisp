@@ -210,9 +210,20 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void Retry(QueueItem item)
     {
+        // Reset every result/progress field so a retried row starts clean — a stale
+        // OutputPath/summary from the failed attempt must not linger.
         item.Status = QueueStatus.Waiting;
         item.Error = null;
         item.Progress = 0;
+        item.Stage = "";
+        item.CutsSummary = "";
+        item.OutputPath = null;
+        item.BackupPath = null;
+        item.IsEditorExport = false;
+        item.CanOpenInEditor = false;
+        item.KeepFilePath = null;
+        item.OrigSeconds = 0;
+        item.SavedSeconds = 0;
         RefreshCounts();
     }
 
