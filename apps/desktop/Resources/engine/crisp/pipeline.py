@@ -364,6 +364,7 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
                 remove_retakes=DEFAULT_REMOVE_RETAKES, backup=DEFAULT_BACKUP,
                 backup_dir=None, out_dir=None, split_tracks=False, split_audio="match",
                 waveform_buckets=0, keep_file=None, captions="none",
+                burn_subtitles=False,
                 filler_backend="whisper", filler_model=None,
                 fade_ms=DEFAULT_FADE_MS, crossfade_ms=DEFAULT_CROSSFADE_MS, snap_ms=DEFAULT_SNAP_MS,
                 retake_sensitivity=DEFAULT_RETAKE_SENSITIVITY,
@@ -709,11 +710,22 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
     if enc_pix != "yuv420p":
         attempts.append((False, "yuv420p"))      # last resort: drop to standard 8-bit 4:2:0
     last = len(attempts) - 1
+    burn_subtitle_path = None
+    if burn_subtitles and words:
+        import tempfile
+        from .captions import write_captions
+        # Create a temporary file for the SRT to be burned in
+        fd, temp_srt = tempfile.mkstemp(suffix=".srt", text=True)
+        os.close(fd)
+        write_captions(temp_srt, words, keep, "srt")
+        burn_subtitle_path = temp_srt
+
     for i, (hw, pix) in enumerate(attempts):
         try:
             render(src, keep, out_path, on_log, stage(0.60, 1.0),
                    video_args(video_codec, hw, quality, pix, hdr_params=hdr_params) + color_flags,
-                   audio, mux, fade=fade_s, crossfade=crossfade_s, fps=target_fps, logger=logger)
+                   audio, mux, fade=fade_s, crossfade=crossfade_s, fps=target_fps, logger=logger,
+                   burn_subtitle_path=burn_subtitle_path)
             # hdr_params is written only by libx265 on a deep (≥10-bit) encode (see
             # video_args), so claim preservation only when this attempt was exactly that —
             # never on a hardware attempt or the 8-bit fallback.
@@ -740,6 +752,12 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
         # while a different same-named source (or a file we didn't make) gets its own
         # _N copy. Applies beside the source and in a chosen folder alike.
         tag_output_source(out_path, src)
+
+    if burn_subtitle_path and os.path.exists(burn_subtitle_path):
+        try:
+            os.remove(burn_subtitle_path)
+        except OSError:
+            pass
 
     # Optionally demux the cleaned file into separate video-only / audio-only stems
     # (stream copy, fast) for editors that animate the picture over the voiceover.

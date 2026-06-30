@@ -34,6 +34,8 @@ public partial class EngineSettings : ObservableObject
     [ObservableProperty] private string _frameRateMode = "auto";
     [ObservableProperty] private double _frameRateValue;
     [ObservableProperty] private string _captionsFormat = "none";
+    public string[] CaptionsFormats { get; } = { "none", "srt", "vtt", "both" };
+    [ObservableProperty] private bool _burnSubtitles;
     [ObservableProperty] private string _retakeSensitivity = "aggressive";
     [ObservableProperty] private bool _backupOriginal = true;
     [ObservableProperty] private int _maxParallel = 2; // clean up to N files at once
@@ -154,6 +156,7 @@ public partial class EngineSettings : ObservableObject
         FrameRateMode = _config.FrameRateMode;
         FrameRateValue = _config.FrameRateValue;
         CaptionsFormat = _config.CaptionsFormat;
+        BurnSubtitles = _config.BurnSubtitles ?? false;
         RetakeSensitivity = _config.RetakeSensitivity;
         BackupOriginal = _config.BackupOriginal;
         MaxParallel = _config.ManualConcurrency;
@@ -195,6 +198,7 @@ public partial class EngineSettings : ObservableObject
         _config.FrameRateMode = FrameRateMode;
         _config.FrameRateValue = FrameRateValue;
         _config.CaptionsFormat = CaptionsFormat;
+        _config.BurnSubtitles = BurnSubtitles;
         _config.RetakeSensitivity = RetakeSensitivity;
         _config.BackupOriginal = BackupOriginal;
         _config.ManualConcurrency = MaxParallel;
@@ -255,6 +259,7 @@ public partial class EngineSettings : ObservableObject
         }
 
         if (CaptionsFormat != "none") { a.Add("--captions"); a.Add(CaptionsFormat); }
+        if (BurnSubtitles) { a.Add("--burn-subtitles"); }
         if (ExportToEditor) { a.Add("--export-timeline"); a.Add("fcpxml"); } // editor handoff, no render
         if (SplitTracks) { a.Add("--split"); a.Add("--split-audio"); a.Add(SplitAudioFormat); }
 

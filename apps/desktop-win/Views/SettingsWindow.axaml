@@ -118,6 +118,14 @@
             <Border Classes="card">
                 <StackPanel Spacing="10">
                     <TextBlock Classes="head" Text="Output"/>
+                    <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="lbl" Text="Export subtitles (sidecar files)"/>
+                        <ComboBox Grid.Column="1" AutomationProperties.Name="Subtitle format"
+                                  HorizontalAlignment="Right" Width="140"
+                                  ItemsSource="{Binding CaptionsFormats}" SelectedItem="{Binding CaptionsFormat}"/></Grid>
+                    <Grid ColumnDefinitions="*,Auto" IsEnabled="{Binding !ExportToEditor}"><TextBlock Grid.Column="0" Classes="lbl" Text="Burn subtitles into the video"/>
+                        <ToggleSwitch Grid.Column="1" AutomationProperties.Name="Burn subtitles into the video"
+                                      HorizontalAlignment="Right" IsChecked="{Binding BurnSubtitles}"/></Grid>
+                    
                     <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="lbl" Text="Prepare an editor timeline (FCPXML), don't render"/>
                         <ToggleSwitch Grid.Column="1" AutomationProperties.Name="Prepare an editor timeline instead of rendering"
                                       HorizontalAlignment="Right" IsChecked="{Binding ExportToEditor}"/></Grid>

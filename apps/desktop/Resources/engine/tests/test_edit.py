@@ -208,6 +208,12 @@ class BuildFilterGraphTests(unittest.TestCase):
         self.assertNotIn("xfade", graph)
         self.assertIn("concat=n=2:v=1:a=1[outv][outa]", graph)
 
+    def test_burn_subtitles_graph(self):
+        lines = build_filter_graph([(0.0, 2.0), (3.0, 5.0)], burn_subtitle_path="C:\\temp\\sub.srt")
+        graph = "\n".join(lines)
+        self.assertIn("concat=n=2:v=1:a=1[pre_sub_v][outa]", graph)
+        self.assertIn("subtitles='C\\:/temp/sub.srt'[outv]", graph)
+
     def test_fade_adds_in_out_to_each_segment(self):
         lines = build_filter_graph([(0.0, 2.0), (3.0, 5.0)], fade=0.010, crossfade=0.0)
         graph = "\n".join(lines)

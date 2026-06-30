@@ -152,6 +152,8 @@ def main():
     p.add_argument("--captions", choices=["none", "srt", "vtt", "both"], default="none",
                    help="also write subtitle sidecar files (re-timed to the cleaned "
                         "video) beside the output: SubRip (.srt), WebVTT (.vtt), or both")
+    p.add_argument("--burn-subtitles", action="store_true",
+                   help="burn the subtitles directly into the video picture")
     p.add_argument("--filler-backend", choices=["whisper", "coreml"], default=DEFAULT_FILLER_BACKEND,
                    help="how to find filler words: 'whisper' (transcribe) or 'coreml' "
                         "(fast on-device classifier via --filler-model)")
@@ -251,6 +253,7 @@ def main():
                              out_dir=args.out_dir, split_tracks=args.split,
                              split_audio=args.split_audio, waveform_buckets=args.waveform,
                              keep_file=args.keep_file, captions=args.captions,
+                             burn_subtitles=args.burn_subtitles,
                              filler_backend=args.filler_backend, filler_model=args.filler_model,
                              fade_ms=args.fade_ms, crossfade_ms=args.crossfade_ms, snap_ms=args.snap_ms,
                              fps_mode=args.fps_mode, fps=args.fps,

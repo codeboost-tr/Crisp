@@ -40,6 +40,7 @@ public sealed class EngineConfig
     public double FrameRateValue { get; set; }
 
     public string CaptionsFormat { get; set; } = "none";
+    public bool? BurnSubtitles { get; set; } // Nullable for backwards compatibility with older config files
     public string RetakeSensitivity { get; set; } = "aggressive";
     public bool BackupOriginal { get; set; } = true;
     public int ManualConcurrency { get; set; } = 2; // how many files to clean at once
