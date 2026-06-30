@@ -565,7 +565,10 @@ public partial class MainWindowViewModel : ViewModelBase
                 Fillers = fillers, Pauses = pauses, Retakes = retakes,
             });
         }
-        catch (JsonException) { /* leave summary empty */ }
+        // JsonException for malformed JSON; InvalidOperationException if a value is the
+        // wrong kind (e.g. GetString on a non-string) — either way, leave the row's result
+        // fields as-is rather than letting it escape the Progress callback on the UI thread.
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException) { /* leave summary empty */ }
     }
 
     /// Batch summary for the bottom bar once everything finishes.

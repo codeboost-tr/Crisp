@@ -188,11 +188,13 @@ sealed class Program
         try { File.Delete(Crisp.Models.EngineConfig.FilePath); } catch { }
         var cfg = Crisp.Models.EngineConfig.Load();
         cfg.VideoCodec = "h264";
-        cfg.Extra["presets"] = JsonDocument.Parse("[]").RootElement.Clone();
+        // A genuinely-unmodeled key (e.g. a macOS-only setting) must ride through
+        // JsonExtensionData so the shared settings.json never loses the Mac app's keys.
+        cfg.Extra["someMacOnlyKey"] = JsonDocument.Parse("true").RootElement.Clone();
         cfg.Save();
         var back = Crisp.Models.EngineConfig.Load();
-        var ok = back.VideoCodec == "h264" && back.Extra.ContainsKey("presets");
-        Console.WriteLine($"round-trip: codec={back.VideoCodec} extraPreserved={back.Extra.ContainsKey("presets")} -> {(ok ? "OK" : "FAIL")}");
+        var ok = back.VideoCodec == "h264" && back.Extra.ContainsKey("someMacOnlyKey");
+        Console.WriteLine($"round-trip: codec={back.VideoCodec} extraPreserved={back.Extra.ContainsKey("someMacOnlyKey")} -> {(ok ? "OK" : "FAIL")}");
         return ok ? 0 : 1;
     }
 

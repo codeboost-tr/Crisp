@@ -29,10 +29,22 @@ public partial class EngineSettings : ObservableObject
     [ObservableProperty] private string _videoQuality = "high";
     [ObservableProperty] private string _audioCodec = "aac";
     [ObservableProperty] private int _audioBitrateKbps = 192;
-    [ObservableProperty] private string _outputContainer = "auto";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ForcesOwnCodecs))]
+    private string _outputContainer = "auto";
+
+    /// WebM can only hold VP9 + Opus, so the engine coerces the codec choice — the Settings
+    /// UI greys out the video/audio/HW controls when WebM is selected (they don't apply).
+    /// Parity with macOS OutputContainer.forcesOwnCodecs.
+    public bool ForcesOwnCodecs => OutputContainer == "webm";
     [ObservableProperty] private string _colorDepth = "auto";
-    [ObservableProperty] private string _frameRateMode = "auto";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsConstantFps))]
+    private string _frameRateMode = "auto";
     [ObservableProperty] private double _frameRateValue;
+
+    /// "constant" needs a target fps value; the Settings UI shows the input only then.
+    public bool IsConstantFps => FrameRateMode == "constant";
     [ObservableProperty] private string _captionsFormat = "none";
     [ObservableProperty] private string _retakeSensitivity = "aggressive";
     [ObservableProperty] private bool _backupOriginal = true;
