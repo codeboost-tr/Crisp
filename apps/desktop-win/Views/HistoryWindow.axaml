@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:svc="using:Crisp.Services"
+        xmlns:models="using:Crisp.Models"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="560"
+        x:Class="Crisp.Views.HistoryWindow"
+        x:DataType="svc:HistoryStore"
+        Width="520" Height="560"
+        Background="{DynamicResource CrispWindowBg}"
+        WindowStartupLocation="CenterOwner"
+        Title="Crisp History">
+
+    <DockPanel Margin="22" LastChildFill="True">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,14">
+            <TextBlock Grid.Column="0" Text="History" FontSize="22" FontWeight="Bold"/>
+            <Button Grid.Column="1" Content="Clear" Click="OnClear" IsEnabled="{Binding !IsEmpty}"/>
+        </Grid>
+
+        <TextBlock IsVisible="{Binding IsEmpty}" Classes="secondary" VerticalAlignment="Center"
+                   HorizontalAlignment="Center" Text="No cleans yet."/>
+
+        <Border Classes="card" Padding="6" IsVisible="{Binding !IsEmpty}">
+            <ListBox ItemsSource="{Binding Entries}" Background="Transparent">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:HistoryEntry">
+                        <Grid ColumnDefinitions="*,Auto" Margin="4,6">
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Text="{Binding InputName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Classes="secondary" FontSize="11"
+                                           Text="{Binding DateText}"/>
+                                <TextBlock Classes="secondary" FontSize="11" IsVisible="{Binding CutsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                           Text="{Binding CutsText}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <TextBlock Classes="secondary" FontSize="11" VerticalAlignment="Center"
+                                           Text="{Binding SavedText, StringFormat='saved {0}'}"/>
+                                <Button Content="Reveal" Click="OnReveal" CommandParameter="{Binding}"/>
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+    </DockPanel>
+</Window>

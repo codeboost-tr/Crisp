@@ -1,0 +1,147 @@
+name: Windows
+
+# CI for the Windows port (apps/desktop-win, Avalonia/.NET). Mirrors the macOS
+# pipeline's gate: build → headless self-tests + the shared engine's Python tests
+# (run here on real Windows, so the OS-aware encoder branch is exercised on the
+# platform it targets) → publish a self-contained win-x64 build as an artifact a
+# reviewer can run. The engine lives in apps/desktop/Resources/engine and is
+# shared, so a change there also triggers this.
+on:
+  push:
+    branches: [main, nightly]
+    paths:
+      - "apps/desktop-win/**"
+      - "apps/desktop/Resources/engine/**"
+      - ".github/workflows/windows.yml"
+  pull_request:
+    paths:
+      - "apps/desktop-win/**"
+      - "apps/desktop/Resources/engine/**"
+      - ".github/workflows/windows.yml"
+  workflow_dispatch: {} # run the heavy `package` job on demand (vendors binaries)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build, test & publish (win-x64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/desktop-win
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Restore & build
+        run: dotnet build Crisp.sln -c Release
+
+      # Headless self-tests (Program.cs --*-test modes) — the same checks run on the
+      # dev's Mac. Each returns non-zero on failure, so a regression fails the job.
+      - name: App self-tests
+        run: |
+          dotnet run --project Crisp.csproj -c Release --no-build -- --preset-test
+          dotnet run --project Crisp.csproj -c Release --no-build -- --channel-test
+          dotnet run --project Crisp.csproj -c Release --no-build -- --editor-test
+          dotnet run --project Crisp.csproj -c Release --no-build -- --review-test
+          New-Item -ItemType File -Path sample.mp4 -Force | Out-Null
+          Set-Content -Path sample.mp4 -Value ("x" * 4096)
+          dotnet run --project Crisp.csproj -c Release --no-build -- --watch-test sample.mp4
+
+      # The shared engine's OS-aware code (encoder selection + process-teardown guard)
+      # validated on real Windows — these are fully platform-mocked, so they assert the
+      # win32 branch the macOS runner never hits. The rest of the engine suite (262
+      # tests) runs comprehensively on macOS CI (ci.yml); many of those assert macOS
+      # encoder names / POSIX path strings, so they're macOS-only by design.
+      - name: Engine OS-aware encoder tests (Python, on Windows)
+        working-directory: apps/desktop/Resources/engine
+        run: python -m unittest tests.test_encode_platform -v
+
+      - name: Publish self-contained win-x64
+        run: |
+          dotnet publish Crisp.csproj -c Release -r win-x64 --self-contained `
+            -p:PublishSingleFile=false -o publish
+          # Bundle the shared engine beside the .exe (ResolveEngineScript finds it at
+          # engine/clean_video.py). The win64 ffmpeg/whisper/python binaries are added
+          # by vendor-win.ps1 / resolved from PATH at runtime.
+          Copy-Item -Recurse -Force ../desktop/Resources/engine publish/engine
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v7
+        with:
+          name: Crisp-win-x64
+          path: apps/desktop-win/publish
+
+  # Vendors the engine binaries (ffmpeg/whisper/python, pinned + hash-checked) and
+  # produces the self-contained bundle + Crisp-Setup.exe installer — the build a user
+  # actually runs. The vendored binaries are cached on the vendor-script hash, so the
+  # heavy ffmpeg download + whisper.cpp build only happen when the pins change; after
+  # that the bundle is produced on every push, downloadable from the run's artifacts.
+  package:
+    name: Bundle self-contained + installer (win-x64)
+    runs-on: windows-latest
+    needs: build
+    defaults:
+      run:
+        working-directory: apps/desktop-win
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Cache vendored binaries
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop-win/.vendor/bin
+          key: vendor-win-${{ hashFiles('apps/desktop-win/Scripts/vendor-win.ps1') }}
+
+      - name: Vendor engine binaries (ffmpeg/whisper/python, pinned)
+        run: pwsh Scripts/vendor-win.ps1
+
+      - name: Publish + bundle the engine and its binaries
+        run: |
+          dotnet publish Crisp.csproj -c Release -r win-x64 --self-contained -o publish
+          Copy-Item -Recurse -Force ../desktop/Resources/engine publish/engine
+          New-Item -ItemType Directory -Force -Path publish/engine/bin | Out-Null
+          Copy-Item -Recurse -Force .vendor/bin/* publish/engine/bin/
+
+      - name: Upload self-contained bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: Crisp-win-x64-bundle
+          path: apps/desktop-win/publish
+
+      - name: Build installer (Inno Setup)
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          $ver = if ($env:CRISP_VERSION) { $env:CRISP_VERSION } else { "0.0" }
+          & $iscc "/DSourceDir=$PWD\publish" "/DAppVersion=$ver" Scripts\crisp.iss
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: Crisp-Setup
+          path: apps/desktop-win/Scripts/Crisp-Setup.exe

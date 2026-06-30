@@ -2,8 +2,10 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from .errors import CleanError
@@ -17,6 +19,12 @@ def _resolve_tool(env_var: str, candidates: tuple, hint: str) -> str:
     override = os.environ.get(env_var)
     if override and Path(override).exists():
         return override
+    # On Windows, try explicit `.exe` names first so shutil.which can't resolve a
+    # non-executable that happens to share the stem (a bash wrapper, a .CPL) and trip
+    # `WinError 193: %1 is not a valid Win32 application`. (Picked up from a Windows-port
+    # contribution — see PR #120.)
+    if sys.platform == "win32":
+        candidates = tuple(c if c.endswith(".exe") else c + ".exe" for c in candidates) + candidates
     for name in candidates:
         path = shutil.which(name)
         if path:
@@ -30,6 +38,26 @@ def ffmpeg_bin() -> str:
 
 def ffprobe_bin() -> str:
     return _resolve_tool("CRISP_FFPROBE", ("ffprobe",), "Install it with:  brew install ffmpeg")
+
+
+_HW_ENCODER_CACHE = None
+
+
+def available_hw_encoders() -> set:
+    """The hardware video encoders this ffmpeg build exposes — the `*_videotoolbox`
+    (macOS) / `*_nvenc` / `*_qsv` / `*_amf` (Windows) names, parsed from
+    `ffmpeg -encoders`. Cached (one subprocess per run); empty set if ffmpeg is
+    missing or the probe fails, so the caller cleanly falls back to software."""
+    global _HW_ENCODER_CACHE
+    if _HW_ENCODER_CACHE is None:
+        try:
+            res = subprocess.run([ffmpeg_bin(), "-hide_banner", "-encoders"],
+                                 capture_output=True, text=True, timeout=15)
+            _HW_ENCODER_CACHE = set(re.findall(
+                r"\b([a-z0-9]+_(?:videotoolbox|nvenc|qsv|amf))\b", res.stdout))
+        except Exception:
+            _HW_ENCODER_CACHE = set()
+    return _HW_ENCODER_CACHE
 
 
 def which_whisper():

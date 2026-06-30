@@ -34,6 +34,11 @@ def _enable_group_cancel():
     this, the Swift app terminating us would orphan the encoder, which would keep
     running. Only used in --ndjson (app) mode so a terminal user keeps normal
     Ctrl-C job control."""
+    # Windows has no POSIX process groups (os.setpgrp/getpgrp/killpg don't exist) —
+    # the C#/Avalonia parent uses Process.Kill(entireProcessTree) to reap children
+    # instead, so this is a no-op there rather than an AttributeError crash.
+    if sys.platform == "win32":
+        return
     os.setpgrp()
 
     def _handler(_signum, _frame):
@@ -183,7 +188,14 @@ def main():
         on_progress = lambda f, l="": emit({"event": "progress", "fraction": f, "label": l})
     else:
         def user_log(msg):
-            print(f"→ {msg}" if not msg.startswith(("=", "✅")) else f"\n{msg}", flush=True)
+            line = f"→ {msg}" if not msg.startswith(("=", "✅")) else f"\n{msg}"
+            try:
+                print(line, flush=True)
+            except UnicodeEncodeError:
+                # A legacy Windows console (cp1252) can't encode →/✅ — fall back to ASCII
+                # rather than crash the human-CLI mode. (Picked up from PR #120.)
+                ascii_line = line.replace("→", "->").replace("✅", "[OK]")
+                print(ascii_line.encode("ascii", "replace").decode("ascii"), flush=True)
         on_progress = None
 
     # Tee every human status line into the run log, and record the invocation so a

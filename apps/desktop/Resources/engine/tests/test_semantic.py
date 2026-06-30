@@ -8,6 +8,7 @@ never breaks a clean" — so every failure must degrade to judge=None, never rai
 
 import os
 import stat
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -29,6 +30,10 @@ class _Fake:
     (reads stdin, writes stdout). Installed into CRISP_EMBED for the test's duration."""
 
     def __init__(self, body):
+        # The fake is made executable via a Unix shebang + chmod; Windows can't exec a
+        # .py directly (the real crisp-embed.exe covers the Windows production path).
+        if sys.platform == "win32":
+            raise unittest.SkipTest("fake crisp-embed relies on Unix shebang/chmod exec")
         fd, self.path = tempfile.mkstemp(suffix=".py", prefix="fake_embed_")
         os.write(fd, ("#!/usr/bin/env python3\n" + textwrap.dedent(body)).encode())
         os.close(fd)
@@ -108,7 +113,8 @@ class RunValidationTests(unittest.TestCase):
     """`_run` must reject malformed helper output by raising (so make_judge falls back)."""
 
     def tearDown(self):
-        self.fake.restore()
+        if getattr(self, "fake", None):  # a Windows-skipped _Fake never set it
+            self.fake.restore()
 
     def _run_one(self, body):
         self.fake = _Fake(body)
@@ -149,7 +155,8 @@ class JudgePathIntegrationTests(unittest.TestCase):
     does), not the in-process fake — so the production path itself is covered."""
 
     def tearDown(self):
-        self.fake.restore()
+        if getattr(self, "fake", None):  # a Windows-skipped _Fake never set it
+            self.fake.restore()
 
     def test_detect_retakes_with_real_judge_subprocess(self):
         self.fake = _Fake(_GOOD)                     # judge always returns 1.0
