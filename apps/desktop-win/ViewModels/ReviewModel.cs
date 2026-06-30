@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -47,6 +48,7 @@ public partial class ReviewModel : ObservableObject
     public async Task LoadAsync()
     {
         IsAnalyzing = true;
+        Failed = false; // clear any prior failure if this is a re-analyze
         var raw = await _engine.AnalyzeAsync(Item.Path, CancellationToken.None);
         if (raw is null) { Fail("Couldn't analyze this file."); return; }
         try
@@ -73,7 +75,10 @@ public partial class ReviewModel : ObservableObject
                 }
             Rebuild();
         }
-        catch (JsonException) { Fail("Couldn't read the analysis."); return; }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            Fail("Couldn't read the analysis."); return;
+        }
         IsAnalyzing = false;
     }
 

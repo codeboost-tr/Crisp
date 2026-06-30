@@ -36,6 +36,8 @@ jobs:
         working-directory: apps/desktop-win
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
@@ -100,6 +102,8 @@ jobs:
         working-directory: apps/desktop-win
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"

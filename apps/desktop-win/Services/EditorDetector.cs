@@ -34,9 +34,15 @@ public static class EditorDetector
             var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
             // DaVinci Resolve — the FCPXML-import target whose free edition works.
             yield return ("DaVinci Resolve", Path.Combine(pf, "Blackmagic Design", "DaVinci Resolve", "Resolve.exe"));
-            // Premiere Pro lives in year-stamped folders; probe the recent ones.
-            foreach (var year in new[] { "2025", "2024", "2023" })
-                yield return ("Adobe Premiere Pro", Path.Combine(pf, "Adobe", $"Adobe Premiere Pro {year}", "Adobe Premiere Pro.exe"));
+            // Premiere Pro lives in year-stamped folders ("Adobe Premiere Pro 2025", …) —
+            // discover whichever version(s) are installed rather than guessing the year.
+            var adobe = Path.Combine(pf, "Adobe");
+            if (Directory.Exists(adobe))
+                foreach (var dir in SafeDirs(adobe, "Adobe Premiere Pro *"))
+                {
+                    var exe = Path.Combine(dir, "Adobe Premiere Pro.exe");
+                    if (File.Exists(exe)) yield return ("Adobe Premiere Pro", exe);
+                }
             yield return ("Shotcut", Path.Combine(pf, "Shotcut", "shotcut.exe"));
             yield return ("Kdenlive", Path.Combine(pf, "kdenlive", "bin", "kdenlive.exe"));
         }
@@ -45,6 +51,12 @@ public static class EditorDetector
             yield return ("DaVinci Resolve", "/Applications/DaVinci Resolve.app");
             yield return ("Final Cut Pro", "/Applications/Final Cut Pro.app");
         }
+    }
+
+    private static IEnumerable<string> SafeDirs(string root, string pattern)
+    {
+        try { return Directory.EnumerateDirectories(root, pattern); }
+        catch { return Array.Empty<string>(); }
     }
 
     public static void Launch(VideoEditor editor)

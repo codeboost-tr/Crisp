@@ -73,8 +73,8 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(CleanAllCommand))]
     private bool _removeRetakes;
 
-    // Accepted video types live in the shared VideoTypes.Set (one source of truth for the
-    // queue, watch folder, Explorer verb, and picker).
+    // Accepted video types live in the shared VideoTypes (one source of truth for the
+    // queue, watch folder, Explorer verb, and picker) — use VideoTypes.IsVideo / .Extensions.
 
     // A user-supplied model satisfies the gate without any download.
     public bool NeedsModel => (RemoveFillers || RemoveRetakes) && !Settings.HasCustomModel && !Models.IsReady;
@@ -444,6 +444,15 @@ public partial class MainWindowViewModel : ViewModelBase
         item.Progress = 0;
         item.Stage = "Starting…";
         item.Error = null;
+        // Clear any result metadata from a prior attempt so a re-clean (e.g. after the
+        // engine emitted a result then failed) never shows stale output/summary.
+        item.CutsSummary = "";
+        item.OutputPath = null;
+        item.BackupPath = null;
+        item.IsEditorExport = false;
+        item.CanOpenInEditor = false;
+        item.OrigSeconds = 0;
+        item.SavedSeconds = 0;
         // Per-row recipe: a row's preset (if any) overrides the global recipe knobs; a
         // reviewed row renders its approved keep-file instead of auto-detected cuts.
         var args = BuildArgs(Settings.PresetById(item.PresetId), item.KeepFilePath);
