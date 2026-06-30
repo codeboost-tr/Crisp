@@ -213,6 +213,13 @@ public partial class MainWindowViewModel : ViewModelBase
         item.Status = QueueStatus.Waiting;
         item.Error = null;
         item.Progress = 0;
+        item.Stage = "";
+        item.OutputPath = null;
+        item.BackupPath = null;
+        item.IsEditorExport = false;
+        item.OrigSeconds = 0;
+        item.SavedSeconds = 0;
+        item.CutsSummary = "";
         RefreshCounts();
     }
 

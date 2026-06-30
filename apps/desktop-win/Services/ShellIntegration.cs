@@ -20,7 +20,11 @@ public static class ShellIntegration
     public static bool IsInstalled()
     {
         if (!OperatingSystem.IsWindows()) return false;
-        return Reg("query", KeyFor(Extensions[0])) == 0;
+        foreach (var ext in Extensions)
+        {
+            if (Reg("query", KeyFor(ext)) != 0) return false;
+        }
+        return true;
     }
 
     public static void Install()
