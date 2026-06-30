@@ -105,8 +105,11 @@ public partial class Updater : ObservableObject
     /// arrives with the packaging iteration.
     public void OpenDownload()
     {
-        if (string.IsNullOrEmpty(ReleaseUrl)) return;
-        try { Process.Start(new ProcessStartInfo(ReleaseUrl) { UseShellExecute = true }); }
+        // UseShellExecute would hand any string to the OS handler, so only ever launch a
+        // real http(s) URL (defence-in-depth — the URL comes from the GitHub API response).
+        if (!Uri.TryCreate(ReleaseUrl, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) return;
+        try { Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); }
         catch { /* best effort */ }
     }
 
