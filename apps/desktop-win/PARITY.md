@@ -70,3 +70,9 @@ Legend: ✅ done · 🔜 remaining · 🟡 partial · ⛔ N/A on Windows (Apple-
 - ⛔ ResourceGovernor / Ultra preflight (replaced by simple bounded concurrency)
 - ⛔ Licensing — out of scope: Windows stays free + open source (no monetization until the
   port is a proven 1:1 functional match; no license code is added here)
+
+## Credits
+- **@codeboost-tr** — Windows engine hardening picked up from PRs #120 and #124:
+  the `tools.py` `.exe` resolution that avoids `WinError 193`, the `clean_video.py`
+  ASCII fallback for legacy Windows consoles, the fully-async `gh`-token lookup, and
+  the de-duplicated video-extension list. Thank you. (Co-authored in git.)
