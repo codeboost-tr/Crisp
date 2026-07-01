@@ -8,6 +8,7 @@ import math
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -72,20 +73,25 @@ def make_backup(src: Path, on_log, backup_dir: Path | None = None, logger=None) 
 # (re-cleans get a _1 copy instead of overwriting — the safe way to fail).
 SOURCE_XATTR = "user.crisp.source"
 
-try:
-    import ctypes
+# The prototypes below are the 6-argument BSD/macOS signatures. Only load them on
+# macOS: Windows has no CDLL(None) at all, and Linux's get/setxattr take 4/5 args —
+# calling them through a mismatched prototype only works by ABI accident. Everywhere
+# but macOS we degrade to the dedup fallback (re-cleans get a _1 copy — the safe
+# way to fail).
+_libc = None
+if sys.platform == "darwin":
+    try:
+        import ctypes
 
-    _libc = ctypes.CDLL(None, use_errno=True)
-    _libc.getxattr.restype = ctypes.c_ssize_t
-    _libc.getxattr.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p,
-                               ctypes.c_size_t, ctypes.c_uint32, ctypes.c_int]
-    _libc.setxattr.restype = ctypes.c_int
-    _libc.setxattr.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p,
-                               ctypes.c_size_t, ctypes.c_uint32, ctypes.c_int]
-except (OSError, AttributeError, TypeError):  # pragma: no cover - platform without these symbols
-    # Windows raises TypeError from CDLL(None) ("argument 1 must be str, not None");
-    # xattr is BSD-only anyway, so degrade to the dedup fallback there.
-    _libc = None
+        _libc = ctypes.CDLL(None, use_errno=True)
+        _libc.getxattr.restype = ctypes.c_ssize_t
+        _libc.getxattr.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p,
+                                   ctypes.c_size_t, ctypes.c_uint32, ctypes.c_int]
+        _libc.setxattr.restype = ctypes.c_int
+        _libc.setxattr.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p,
+                                   ctypes.c_size_t, ctypes.c_uint32, ctypes.c_int]
+    except (OSError, AttributeError):  # pragma: no cover - libc without these symbols
+        _libc = None
 
 
 def _output_owner(path: Path):
@@ -387,11 +393,24 @@ def render(src, keep, out_path, on_log, on_progress, video_opts, audio_opts, mux
 
     lines = build_filter_graph(keep, fade=fade, crossfade=crossfade)
 
-    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tf:
+    # Explicit UTF-8 everywhere a tool's output (or a path) crosses a text boundary —
+    # on Windows the default is the locale code page (cp1252) with strict errors,
+    # which crashes on the multibyte filenames ffmpeg happily echoes into stderr.
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", encoding="utf-8", delete=False) as tf:
         tf.write("\n".join(lines))
         graph_path = tf.name
-    err_file = tempfile.NamedTemporaryFile("w+", suffix=".log", delete=False)
+    err_file = tempfile.NamedTemporaryFile("w+", suffix=".log", encoding="utf-8",
+                                           errors="replace", delete=False)
 
+    # Never write the final file in place: a re-clean of the same source deliberately
+    # resolves to its PREVIOUS output (see unique_output_path), so ffmpeg truncating
+    # `out_path` at t=0 would destroy the user's existing good file the moment a
+    # render fails, runs out of disk, or is cancelled (app cancel is a SIGKILL of the
+    # process group — no cleanup runs). Render to a sibling `.part` and publish with
+    # os.replace() (atomic on POSIX and NTFS) only on success; the trailing container
+    # extension is kept so ffmpeg still infers the right muxer. A `.part` orphaned by
+    # SIGKILL is overwritten (-y) or unlinked on the next render to the same output.
+    part_path = out_path.with_name(out_path.stem + ".part" + out_path.suffix)
     try:
         # `-r` on the OUTPUT conforms the cut video to a constant frame rate
         # (dup/drop frames to even spacing). Set only when normalizing a VFR source
@@ -401,27 +420,44 @@ def render(src, keep, out_path, on_log, on_progress, video_opts, audio_opts, mux
                "-filter_complex_script", graph_path,
                "-map", "[outv]", "-map", "[outa]",
                *video_opts, *fps_opts, *audio_opts, *mux_opts,
-               "-progress", "pipe:1", "-nostats", str(out_path)]
+               "-progress", "pipe:1", "-nostats", str(part_path)]
         logger.command("ffmpeg render", cmd)
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err_file, text=True)
-        for line in proc.stdout:
-            line = line.strip()
-            if line.startswith("out_time_us=") or line.startswith("out_time_ms="):
-                try:
-                    val = int(line.split("=")[1])
-                    secs = val / 1_000_000.0  # both keys are microseconds in practice
-                    frac = max(0.0, min(1.0, secs / total))
-                    on_progress(frac, f"Rendering video… {int(frac * 100)}%")
-                except (IndexError, ValueError):
-                    pass
-        proc.wait()
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err_file, text=True,
+                                encoding="utf-8", errors="replace")
+        last_frac = 0.0
+        try:
+            for line in proc.stdout:
+                line = line.strip()
+                if line.startswith("out_time_us=") or line.startswith("out_time_ms="):
+                    try:
+                        val = int(line.split("=")[1])
+                        secs = val / 1_000_000.0  # both keys are microseconds in practice
+                        frac = max(0.0, min(1.0, secs / total))
+                        last_frac = frac
+                        on_progress(frac, f"Rendering video… {int(frac * 100)}%")
+                    except (IndexError, ValueError):
+                        pass
+            proc.wait()
+        except BaseException:
+            # A progress callback blowing up (e.g. BrokenPipeError when the parent
+            # app died) must not orphan a running ffmpeg.
+            proc.kill()
+            proc.wait()
+            raise
         err_file.seek(0)
         err_text = err_file.read()
         logger.tool_result("ffmpeg render", proc.returncode,
-                           err_text if (proc.returncode != 0 or not out_path.exists()) else "")
-        if proc.returncode != 0 or not out_path.exists():
-            raise CleanError(f"Rendering failed.\n{err_text[-1500:]}")
+                           err_text if (proc.returncode != 0 or not part_path.exists()) else "")
+        if proc.returncode != 0 or not part_path.exists():
+            err = CleanError(f"Rendering failed.\n{err_text[-1500:]}")
+            # How far the render got before dying — the pipeline's encoder-fallback
+            # ladder uses this to tell "encoder couldn't start" (retry in software)
+            # from "died mid-render" (disk/I/O — retrying just re-burns hours).
+            err.render_progress = last_frac
+            raise err
+        os.replace(part_path, out_path)
     finally:
+        part_path.unlink(missing_ok=True)  # no-op on success (already replaced away)
         os.unlink(graph_path)
         err_file.close()
         os.unlink(err_file.name)
