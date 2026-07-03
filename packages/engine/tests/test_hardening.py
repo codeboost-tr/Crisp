@@ -1,6 +1,7 @@
 """Fail-fast hardening: a tool failure must surface as a CleanError, never as a
 "successful" clean that silently did the wrong thing (cut nothing, dropped spans)."""
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,7 @@ from unittest import mock
 
 from crisp.detect import detect_silences, filler_words
 from crisp.errors import CleanError
+from crisp.pipeline import clean_video
 
 
 # CI runners have no ffmpeg (this suite is stdlib-only by design), so the binary
@@ -64,6 +66,32 @@ class FillerOutputValidation(unittest.TestCase):
     def test_malformed_span_is_clean_error(self):
         with self.assertRaises(CleanError):
             self._run('{"fillers": [[1.0]]}')
+
+
+class OutputEqualsSourceRefused(unittest.TestCase):
+    """An explicit out_path pointing at the source must be refused before any
+    work starts — render() ends in os.replace(part, out_path), which would
+    destroy the original."""
+
+    def test_out_path_equal_to_src_raises(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = Path(d) / "clip.mp4"
+            src.write_bytes(b"x")
+            with self.assertRaises(CleanError) as cm:
+                clean_video(src, out_path=src)
+            self.assertIn("same as the source", str(cm.exception))
+
+    def test_out_path_hardlink_to_src_raises(self):
+        # A different path to the same inode (hardlink; also the shape of a
+        # case-variant path on a case-insensitive filesystem) must be refused too.
+        with tempfile.TemporaryDirectory() as d:
+            src = Path(d) / "clip.mp4"
+            src.write_bytes(b"x")
+            link = Path(d) / "alias.mp4"
+            os.link(src, link)
+            with self.assertRaises(CleanError) as cm:
+                clean_video(src, out_path=link)
+            self.assertIn("same as the source", str(cm.exception))
 
 
 if __name__ == "__main__":
