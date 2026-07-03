@@ -41,7 +41,10 @@ export function Nav() {
               {label}
             </a>
           ))}
-          <Link to="/pricing" className="text-[13px] text-white/60 transition-colors hover:text-white">
+          <Link
+            to="/pricing"
+            className="text-[13px] text-white/60 transition-colors hover:text-white"
+          >
             Pricing
           </Link>
         </div>

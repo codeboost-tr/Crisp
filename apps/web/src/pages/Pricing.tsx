@@ -71,7 +71,10 @@ export function Pricing() {
 
               <ul className="mt-7 flex flex-col gap-2.5">
                 {FEATURES.map((f) => (
-                  <li key={f} className="flex items-start gap-2.5 text-[14px] leading-relaxed text-white/65">
+                  <li
+                    key={f}
+                    className="flex items-start gap-2.5 text-[14px] leading-relaxed text-white/65"
+                  >
                     <CheckSeal className="mt-0.5 size-[16px] shrink-0 text-[var(--color-accent-bright)]" />
                     {f}
                   </li>
