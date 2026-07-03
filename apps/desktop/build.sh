@@ -32,6 +32,20 @@ case "$CHANNEL" in
     ;;
 esac
 
+# Preflight: if licensing is switched ON, the Polar config must be present, else
+# we'd ship a paywalled build whose activation/checkout silently fails at runtime.
+# Fail fast in CI instead of publishing a misconfigured artifact.
+case "$(echo "${CRISP_LICENSING:-}" | tr '[:upper:]' '[:lower:]')" in
+  1|yes|true)
+    for var in CRISP_POLAR_ORG_ID CRISP_POLAR_CHECKOUT_URL CRISP_POLAR_PORTAL_URL CRISP_POLAR_LOOKUP_URL; do
+      if [ -z "${${(P)var:-}//[[:space:]]/}" ]; then
+        echo "CRISP_LICENSING is on but $var is empty — refusing to build a paywalled app with broken Polar config." >&2
+        exit 1
+      fi
+    done
+    ;;
+esac
+
 echo "Compiling (arm64)…  [channel: $CHANNEL]"
 # Apple Silicon only — Intel Macs are no longer supported, so we build a single
 # arm64 slice (the bundled engine binaries are arm64 too).
@@ -65,8 +79,8 @@ echo "Vendoring engine binaries…"
 ./Scripts/vendor.sh
 echo "Bundling cleaning engine…"
 mkdir -p "$APP/Contents/Resources/engine"
-cp Resources/engine/clean_video.py "$APP/Contents/Resources/engine/clean_video.py"
-cp -R Resources/engine/crisp "$APP/Contents/Resources/engine/crisp"
+cp ../../packages/engine/clean_video.py "$APP/Contents/Resources/engine/clean_video.py"
+cp -R ../../packages/engine/crisp "$APP/Contents/Resources/engine/crisp"
 find "$APP/Contents/Resources/engine/crisp" -name __pycache__ -type d -prune -exec rm -rf {} +
 cp -R .vendor/bin "$APP/Contents/Resources/engine/bin"
 # The on-device filler detector (swift-built, not vendored). Lives beside

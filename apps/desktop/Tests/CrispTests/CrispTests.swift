@@ -132,6 +132,26 @@ final class CrispTests: XCTestCase {
         XCTAssertEqual(r.removedSeconds, 5.85, accuracy: 0.0001) // 10 - (10 - 5.85)
     }
 
+    func testCutPreviewTightenKeepsGapAtPauseStart() {
+        // Tighten keeps 0.3s extra silence at the pause start: removal shrinks from
+        // (3.15, 5.85) to (3.45, 5.85). Mirrors build_keep_segments' tighten branch.
+        let r = CutPreview.compute(silences: [(3, 6)], duration: 10,
+                                   pause: 0.6, keepPause: 0.15, minKeep: 0.05,
+                                   pauseMode: "tighten", tightPause: 0.3)
+        XCTAssertEqual(r.pauseCount, 1)
+        XCTAssertEqual(r.removedSeconds, 2.4, accuracy: 0.0001)   // 2.7 - 0.3
+        XCTAssertEqual(r.keep[0].upperBound, 3.45, accuracy: 0.0001)
+    }
+
+    func testCutPreviewTightenLeavesShortPauseUntouched() {
+        // The gap tighten would keep exceeds the pause itself → no cut, not counted.
+        let r = CutPreview.compute(silences: [(3, 3.7)], duration: 10,
+                                   pause: 0.6, keepPause: 0.15, minKeep: 0.05,
+                                   pauseMode: "tighten", tightPause: 0.5)
+        XCTAssertEqual(r.pauseCount, 0)
+        XCTAssertEqual(r.keep, [0...10])
+    }
+
     func testCutPreviewRemovedMask() {
         let r = CutPreview.compute(silences: [(3, 6)], duration: 10,
                                    pause: 0.6, keepPause: 0.15, minKeep: 0.05)
@@ -332,7 +352,7 @@ final class CrispTests: XCTestCase {
         // through too — otherwise a preset saved at "10" would silently render "auto".
         let preset = Preset(name: "P", strength: .aggressive, config: cfg)
         XCTAssertEqual(preset.colorDepth, "10")                                  // snapshot kept it
-        XCTAssertEqual(preset.parameters(exportToEditor: false).colorDepth, "10")  // and restores it
+        XCTAssertEqual(preset.parameters(using: .defaults).colorDepth, "10")     // and restores it over the live config
     }
 
     func testPresetColorDepthForwardCompatDecodesMissingKey() throws {
@@ -470,6 +490,43 @@ final class CrispTests: XCTestCase {
         XCTAssertFalse(args.contains("--no-fillers"))
         XCTAssertFalse(args.contains("--no-backup"))
         XCTAssertEqual(valueAfter("--pause", in: args), String(Strength.aggressive.pause))
+        // Pause handling is always passed explicitly, so the Swift config stays
+        // authoritative over the engine's own default.
+        XCTAssertEqual(valueAfter("--pause-mode", in: args), "remove")
+        XCTAssertEqual(valueAfter("--tight-pause", in: args), "0.3")
+    }
+
+    func testCleanRunnerThreadsPauseTightenMode() {
+        var cfg = EngineConfig.defaults
+        cfg.pauseMode = "tighten"
+        cfg.tightPause = 0.2
+        let params = Strength.balanced.parameters(using: cfg)
+        let args = CleanRunner.arguments(scriptPath: "/eng/clean_video.py",
+                                         input: URL(fileURLWithPath: "/v/in.mp4"),
+                                         parameters: params,
+                                         options: .init(removeFillers: false))
+        XCTAssertEqual(valueAfter("--pause-mode", in: args), "tighten")
+        XCTAssertEqual(valueAfter("--tight-pause", in: args), "0.2")
+    }
+
+    func testPauseModeClampsCorruptValueToRemove() {
+        // A hand-edited settings.json must never hard-fail a clean: --pause-mode has
+        // fixed choices, so an unknown value resolves to "remove".
+        var cfg = EngineConfig.defaults
+        cfg.pauseMode = "bogus"
+        let params = Strength.balanced.parameters(using: cfg)
+        XCTAssertEqual(params.pauseMode, "remove")
+    }
+
+    func testTightPauseClampsHandEditedValues() {
+        // The shared mapping clamps to the slider bounds so the headless paths
+        // (watcher, App Intents) can't cut into speech on a negative value or
+        // silently stop cutting pauses on a huge one.
+        var cfg = EngineConfig.defaults
+        cfg.tightPause = -2
+        XCTAssertEqual(Strength.balanced.parameters(using: cfg).tightPause, 0)
+        cfg.tightPause = 100
+        XCTAssertEqual(Strength.balanced.parameters(using: cfg).tightPause, 0.5)
     }
 
     func testCleanRunnerThreadsNonDefaultColorDepth() {
@@ -889,7 +946,7 @@ final class CrispTests: XCTestCase {
         cfg.outputDirectory = "/Volumes/NAS"; cfg.backupOriginal = false
         for strength in [Strength.gentle, .aggressive, .custom] {
             let preset = Preset(name: "P", strength: strength, config: cfg)
-            XCTAssertEqual(preset.parameters(exportToEditor: cfg.exportToEditor),
+            XCTAssertEqual(preset.parameters(using: cfg),
                            strength.parameters(using: cfg),
                            "\(strength.rawValue) preset should match the global path")
         }
@@ -899,8 +956,25 @@ final class CrispTests: XCTestCase {
         // The global editor-handoff mode must apply to preset-backed rows too (else they
         // silently render while "Send to editor" is on).
         let preset = Preset(name: "P", strength: .balanced, config: .defaults)
-        XCTAssertEqual(preset.parameters(exportToEditor: true).exportTimeline, "fcpxml")
-        XCTAssertEqual(preset.parameters(exportToEditor: false).exportTimeline, "none")
+        var cfg = EngineConfig.defaults
+        cfg.exportToEditor = true
+        XCTAssertEqual(preset.parameters(using: cfg).exportTimeline, "fcpxml")
+        cfg.exportToEditor = false
+        XCTAssertEqual(preset.parameters(using: cfg).exportTimeline, "none")
+    }
+
+    func testPresetHonorsLiveGlobalOnlySettings() {
+        // A preset stores only its own recipe, so global-only knobs (captions, split
+        // tracks, retake sensitivity, …) must flow in from the LIVE config, not reset to
+        // EngineConfig.defaults — while the preset's own overrides still win.
+        var cfg = EngineConfig.defaults
+        cfg.captionsFormat = "srt"; cfg.splitTracks = true; cfg.retakeSensitivity = "gentle"
+        let preset = Preset(name: "P", strength: .balanced, config: .defaults)
+        let params = preset.parameters(using: cfg)
+        XCTAssertEqual(params.captionsFormat, "srt")        // live global preserved (default "none")
+        XCTAssertTrue(params.splitTracks)                   // live global preserved (default false)
+        XCTAssertEqual(params.retakeSensitivity, "gentle")  // live global preserved (default "aggressive")
+        XCTAssertEqual(params.colorDepth, preset.colorDepth)    // preset's own recipe still wins
     }
 
     func testPresetRoundTripsThroughConfig() throws {
