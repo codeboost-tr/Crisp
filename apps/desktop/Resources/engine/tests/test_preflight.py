@@ -84,7 +84,7 @@ class PreflightStreamChecks(unittest.TestCase):
     def test_analyze_mode_uses_tempdir(self, disk_usage, probe_stream_meta):
         probe_stream_meta.return_value = _make_meta()
         disk_usage.return_value.free = 500_000_000
-        _preflight_checks(_mock_src(), _mock_out(), duration=60.0, will_backup=False)
+        _preflight_checks(_mock_src(), _mock_out(), duration=60.0, analyze_only=True)
         out_dir_arg = disk_usage.call_args[0][0]
         import tempfile
         self.assertEqual(out_dir_arg, Path(tempfile.gettempdir()))
@@ -94,4 +94,25 @@ class PreflightStreamChecks(unittest.TestCase):
     def test_analyze_mode_lower_disk_need(self, disk_usage, probe_stream_meta):
         probe_stream_meta.return_value = _make_meta()
         disk_usage.return_value.free = 5_000_000
-        _preflight_checks(_mock_src(file_size=50_000_000), _mock_out(), duration=10.0, will_backup=False)
+        # This would fail under will_backup=True (need ≈50MB + WAV > 5MB free),
+        # but analyze_only only budgets the WAV (~1.7 MB for 10s) so it passes.
+        _preflight_checks(_mock_src(file_size=50_000_000), _mock_out(), duration=10.0, analyze_only=True)
+
+    @patch("crisp.pipeline.probe_stream_meta")
+    @patch("crisp.pipeline.shutil.disk_usage")
+    def test_render_without_backup_uses_outdir(self, disk_usage, probe_stream_meta):
+        probe_stream_meta.return_value = _make_meta()
+        disk_usage.return_value.free = 500_000_000
+        _preflight_checks(_mock_src(), _mock_out(parent=Path("/media/out")),
+                          duration=60.0, will_backup=False, analyze_only=False)
+        out_dir_arg = disk_usage.call_args[0][0]
+        self.assertEqual(out_dir_arg, Path("/media/out"))
+
+    @patch("crisp.pipeline.probe_stream_meta")
+    @patch("crisp.pipeline.shutil.disk_usage")
+    def test_preflight_returns_meta(self, disk_usage, probe_stream_meta):
+        probe_stream_meta.return_value = _make_meta(video_codec="hevc")
+        disk_usage.return_value.free = 500_000_000
+        meta = _preflight_checks(_mock_src(), _mock_out(), duration=60.0)
+        self.assertEqual(meta["video_codec"], "hevc")
+        self.assertEqual(meta["audio_channels"], 2)

@@ -328,9 +328,10 @@ def _cleanup_temp_project(media_tmp, fcpxml_tmp, pdir, created):
 ANALYZE_MIN_PAUSE = 0.05
 
 
-def _preflight_checks(src, out_path, duration, logger=None, will_backup=True):
+def _preflight_checks(src, out_path, duration, logger=None, will_backup=True, analyze_only=False):
     """Check video/audio validity, decodable codec, and disk space before a render.
-    Raises CleanError with a clear message on any failure — fail fast."""
+    Raises CleanError with a clear message on any failure — fail fast.
+    Returns the stream metadata dict for reuse by the caller."""
     # 1. Probe stream metadata — rejects files with no video stream
     src_meta = probe_stream_meta(src, logger=logger, require_fps=False)
     if src_meta is None:
@@ -352,15 +353,17 @@ def _preflight_checks(src, out_path, duration, logger=None, will_backup=True):
     try:
         wav_estimate = int(duration * 176400)
         src_size = src.stat().st_size
-        # When will_backup is False (analyze-only), we only write a temp WAV —
-        # check the system temp dir and budget only for the WAV size, ignoring
-        # output + backup that analyze never creates.
-        if will_backup:
-            out_dir = out_path.parent
-            need = src_size * 2 + wav_estimate
-        else:
+        if analyze_only:
+            # Analyze-only writes a temp WAV in the system temp dir — no output,
+            # no backup. Check the temp volume and budget only for the WAV.
             out_dir = Path(tempfile.gettempdir())
             need = wav_estimate
+        else:
+            # Render writes the output (and optionally a backup) to out_path.parent.
+            # The backup is charged against backup_dir separately if it's on a
+            # different volume; here we only budget for the output file itself.
+            out_dir = out_path.parent
+            need = src_size + wav_estimate
         free = shutil.disk_usage(out_dir).free
         if free < need:
             raise CleanError(
@@ -368,6 +371,8 @@ def _preflight_checks(src, out_path, duration, logger=None, will_backup=True):
                 f"only {free / (1024**3):.1f} GB available at \"{out_dir}\".")
     except OSError:
         pass  # can't check disk space on this platform
+
+    return src_meta
 
 
 def analyze(src, noise=DEFAULT_NOISE_DB, buckets=240, on_log=None, logger=None):
@@ -386,7 +391,7 @@ def analyze(src, noise=DEFAULT_NOISE_DB, buckets=240, on_log=None, logger=None):
     duration = ffprobe_duration(src, logger=logger)
     if duration <= 0:
         raise CleanError("Could not read the video's duration — is it a valid video file?")
-    _preflight_checks(src, out_path=src, duration=duration, logger=logger, will_backup=False)
+    _preflight_checks(src, out_path=src, duration=duration, logger=logger, analyze_only=True)
 
     with tempfile.TemporaryDirectory() as tmp:
         wav = Path(tmp) / "audio.wav"
@@ -512,7 +517,9 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
     do_backup = backup and export_timeline != "fcpxml"
 
     # Fail fast: validate the source and check resources before any expensive work.
-    _preflight_checks(src, out_path, duration, logger=logger, will_backup=do_backup)
+    # The returned metadata is reused later for pixel-format resolution, avoiding a
+    # redundant ffprobe call on large files over slow storage.
+    pf_meta = _preflight_checks(src, out_path, duration, logger=logger, will_backup=do_backup)
 
     # Editor-handoff copies the original into the project folder, so a separate backup
     # would duplicate a (possibly large) file twice — skip it in that mode.
@@ -730,11 +737,11 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
     mux = container_args(container)
     fade_s, crossfade_s = fade_ms / 1000.0, crossfade_ms / 1000.0
 
-    # Source-aware bit depth: probe the source's pixel format + color tags so the render
-    # MATCHES it instead of silently flattening 10-bit / HDR / wide-chroma footage to
-    # 8-bit (philosophy #3). `color_depth` ("auto"|"8"|"10") can override the match. A
-    # probe failure degrades to the safe 8-bit default rather than breaking the clean.
-    src_meta = probe_stream_meta(src, logger=logger, require_fps=False) or {}
+    # Source-aware bit depth: use the metadata already probed by _preflight_checks
+    # so we don't pay for a second ffprobe call on large files over slow storage.
+    # `color_depth` ("auto"|"8"|"10") can override the match. A metadata failure
+    # degrades to the safe 8-bit default rather than breaking the clean.
+    src_meta = pf_meta or {}
     enc_pix, depth_notes = resolve_pix_fmt(color_depth, src_meta.get("pix_fmt", ""), video_codec)
     for note in depth_notes:
         on_log(note)
