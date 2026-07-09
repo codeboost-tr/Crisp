@@ -328,7 +328,7 @@ def _cleanup_temp_project(media_tmp, fcpxml_tmp, pdir, created):
 ANALYZE_MIN_PAUSE = 0.05
 
 
-def _preflight_checks(src, out_path, duration, logger=None):
+def _preflight_checks(src, out_path, duration, logger=None, will_backup=True):
     """Check video/audio validity, decodable codec, and disk space before a render.
     Raises CleanError with a clear message on any failure — fail fast."""
     # 1. Probe stream metadata — rejects files with no video stream
@@ -350,13 +350,18 @@ def _preflight_checks(src, out_path, duration, logger=None):
 
     # 2. Check disk space on the output volume
     try:
-        out_dir = out_path.parent
-        free = shutil.disk_usage(out_dir).free
-        src_size = src.stat().st_size
-        # Rough estimate: output will be ≤ source (similar quality re-encode with
-        # some content removed) + backup copy + temp analysis WAV (~176 KB/s).
         wav_estimate = int(duration * 176400)
-        need = src_size * 2 + wav_estimate
+        src_size = src.stat().st_size
+        # When will_backup is False (analyze-only), we only write a temp WAV —
+        # check the system temp dir and budget only for the WAV size, ignoring
+        # output + backup that analyze never creates.
+        if will_backup:
+            out_dir = out_path.parent
+            need = src_size * 2 + wav_estimate
+        else:
+            out_dir = Path(tempfile.gettempdir())
+            need = wav_estimate
+        free = shutil.disk_usage(out_dir).free
         if free < need:
             raise CleanError(
                 f"Not enough free disk space. Need ≈{need / (1024**3):.1f} GB, "
@@ -381,7 +386,7 @@ def analyze(src, noise=DEFAULT_NOISE_DB, buckets=240, on_log=None, logger=None):
     duration = ffprobe_duration(src, logger=logger)
     if duration <= 0:
         raise CleanError("Could not read the video's duration — is it a valid video file?")
-    _preflight_checks(src, out_path=src, duration=duration, logger=logger)
+    _preflight_checks(src, out_path=src, duration=duration, logger=logger, will_backup=False)
 
     with tempfile.TemporaryDirectory() as tmp:
         wav = Path(tmp) / "audio.wav"
@@ -504,12 +509,13 @@ def clean_video(src, out_path=None, model=None, pause=DEFAULT_MAX_PAUSE,
         raise CleanError("Could not read the video's duration — is it a valid video file?")
     logger.info(f"duration={duration:.2f}s")
 
+    do_backup = backup and export_timeline != "fcpxml"
+
     # Fail fast: validate the source and check resources before any expensive work.
-    _preflight_checks(src, out_path, duration, logger=logger)
+    _preflight_checks(src, out_path, duration, logger=logger, will_backup=do_backup)
 
     # Editor-handoff copies the original into the project folder, so a separate backup
     # would duplicate a (possibly large) file twice — skip it in that mode.
-    do_backup = backup and export_timeline != "fcpxml"
     backup_path = make_backup(src, on_log, backup_dir, logger=logger) if do_backup else None
     if backup_path:
         on_progress(0.03, "Backed up original")

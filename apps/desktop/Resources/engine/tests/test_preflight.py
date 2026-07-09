@@ -78,3 +78,20 @@ class PreflightStreamChecks(unittest.TestCase):
         probe_stream_meta.return_value = _make_meta()
         disk_usage.side_effect = OSError
         _preflight_checks(_mock_src(), _mock_out(), duration=60.0)
+
+    @patch("crisp.pipeline.probe_stream_meta")
+    @patch("crisp.pipeline.shutil.disk_usage")
+    def test_analyze_mode_uses_tempdir(self, disk_usage, probe_stream_meta):
+        probe_stream_meta.return_value = _make_meta()
+        disk_usage.return_value.free = 500_000_000
+        _preflight_checks(_mock_src(), _mock_out(), duration=60.0, will_backup=False)
+        out_dir_arg = disk_usage.call_args[0][0]
+        import tempfile
+        self.assertEqual(out_dir_arg, Path(tempfile.gettempdir()))
+
+    @patch("crisp.pipeline.probe_stream_meta")
+    @patch("crisp.pipeline.shutil.disk_usage")
+    def test_analyze_mode_lower_disk_need(self, disk_usage, probe_stream_meta):
+        probe_stream_meta.return_value = _make_meta()
+        disk_usage.return_value.free = 5_000_000
+        _preflight_checks(_mock_src(file_size=50_000_000), _mock_out(), duration=10.0, will_backup=False)
