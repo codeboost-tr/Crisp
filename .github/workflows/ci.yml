@@ -18,11 +18,20 @@ on:
     branches: [main]
     paths:
       - "apps/desktop/**"
+      # A Windows-only promotion still cuts the stable release (with the rebuilt DMG)
+      # that windows.yml attaches Crisp-Setup.exe to — one release, both assets.
+      - "apps/desktop-win/**"
+      - "packages/engine/**"
       - ".github/workflows/ci.yml"
+      # Docs-only changes never need a build — skip .md-only diffs (last-match-wins).
+      - "!**/*.md"
   pull_request:
     paths:
       - "apps/desktop/**"
+      - "packages/engine/**"
       - ".github/workflows/ci.yml"
+      # Docs-only changes never need a build — skip .md-only diffs (last-match-wins).
+      - "!**/*.md"
 
 # Read-only by default — only the release job below is granted contents: write.
 # Least privilege for the GITHUB_TOKEN; jobs that need more opt in explicitly.
@@ -68,7 +77,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Run engine unit tests
-        run: python3 -m unittest discover -s Resources/engine/tests -t Resources/engine
+        working-directory: packages/engine
+        run: python3 -m unittest discover -s tests -t .
 
   # PR only: build + package the DMG (this IS the release-config build check —
   # build.sh does a universal `swift build -c release`, so a separate build job
@@ -83,6 +93,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build app and installer
         env:
+          CRISP_LICENSING: "YES" # Polar.sh gateway live on the published build
           CRISP_POLAR_ORG_ID: ${{ secrets.CRISP_POLAR_ORG_ID }}
           CRISP_POLAR_CHECKOUT_URL: ${{ secrets.CRISP_POLAR_CHECKOUT_URL }}
           CRISP_POLAR_PORTAL_URL: ${{ secrets.CRISP_POLAR_PORTAL_URL }}
@@ -121,6 +132,7 @@ jobs:
 
       - name: Build app and installer
         env:
+          CRISP_LICENSING: "YES" # Polar.sh gateway live on the published build
           CRISP_POLAR_ORG_ID: ${{ secrets.CRISP_POLAR_ORG_ID }}
           CRISP_POLAR_CHECKOUT_URL: ${{ secrets.CRISP_POLAR_CHECKOUT_URL }}
           CRISP_POLAR_PORTAL_URL: ${{ secrets.CRISP_POLAR_PORTAL_URL }}

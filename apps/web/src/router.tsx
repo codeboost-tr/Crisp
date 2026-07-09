@@ -10,6 +10,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ReactLenis, useLenis } from "lenis/react";
 import { Nav } from "./sections/Nav";
 import { Home } from "./pages/Home";
+import { Pricing } from "./pages/Pricing";
+import { Features } from "./pages/Features";
 import { LegalPage } from "./pages/LegalPage";
 import { privacyDoc, termsDoc } from "./content/legal";
 
@@ -56,6 +58,16 @@ function RootLayout() {
 const rootRoute = createRootRoute({ component: RootLayout });
 
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: Home });
+const pricingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/pricing",
+  component: Pricing,
+});
+const featuresRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/features",
+  component: Features,
+});
 const privacyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/privacy",
@@ -67,7 +79,13 @@ const termsRoute = createRoute({
   component: () => <LegalPage doc={termsDoc} />,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, privacyRoute, termsRoute]);
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  pricingRoute,
+  featuresRoute,
+  privacyRoute,
+  termsRoute,
+]);
 
 export const router = createRouter({
   routeTree,

@@ -59,7 +59,7 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            tab { cuttingSection; retakeSection; smoothingSection; speechModelSection; fillerModelSection }
+            tab { cuttingSection; pauseSection; retakeSection; smoothingSection; speechModelSection; fillerModelSection }
                 .tabItem { Label("Cutting", systemImage: "scissors") }
 
             tab { encodingSection; editorSection; captionsSection; outputLocationSection; originalsSection }
@@ -115,10 +115,26 @@ struct SettingsView: View {
             row(Knob(title: "Minimum keep", help: "Drop kept fragments shorter than this.",
                      unit: "s", range: 0...0.5, step: 0.01), $settings.minKeep)
         } header: {
-            Text("Custom cutting")
-        } footer: {
-            Text("Applied when \u{201C}How much to cut\u{201D} is set to Custom.")
+            SettingsSectionHeader("Custom cutting",
+                help: "These four knobs apply only when \u{201C}How much to cut\u{201D} is set to Custom \u{2014} they set exactly where Crisp places each cut.")
+        }
+    }
+
+    @ViewBuilder private var pauseSection: some View {
+        Section {
+            Picker("Pause handling", selection: $settings.pauseMode) {
+                ForEach(PauseMode.allCases) { Text($0.label).tag($0.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            Text(PauseMode(rawValue: settings.pauseMode)?.detail ?? "")
                 .font(.caption).foregroundStyle(.secondary)
+            if settings.pauseMode == PauseMode.tighten.rawValue {
+                row(Knob(title: "Gap to keep", help: "Silence left at each pause, on top of the breathing room.",
+                         unit: "s", range: 0.05...0.5, step: 0.05), $settings.tightPause)
+            }
+        } header: {
+            SettingsSectionHeader("Pauses",
+                help: "Applied to every clean \u{2014} whether a detected pause is cut out entirely or shortened to a natural gap.")
         }
     }
 
@@ -144,10 +160,8 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         } header: {
-            Text("Repeated takes")
-        } footer: {
-            Text("When you flub a line and immediately say it again, Crisp keeps the corrected take and cuts the first. Turn it on/off per clean with \u{201C}Remove repeated takes.\u{201D} Needs the speech model.")
-                .font(.caption).foregroundStyle(.secondary)
+            SettingsSectionHeader("Repeated takes",
+                help: "When you flub a line and immediately say it again, Crisp keeps the corrected take and cuts the first. Turn it on/off per clean with \u{201C}Remove repeated takes.\u{201D} Needs the speech model.")
         }
     }
 
@@ -160,10 +174,8 @@ struct SettingsView: View {
             row(Knob(title: "Snap to zero-crossing", help: "Nudge each cut onto a nearby point where the audio waveform crosses zero, for a cleaner splice. 0 turns it off.",
                      unit: "ms", range: 0...30, step: 1, decimals: 0), $settings.snapMs)
         } header: {
-            Text("Cut smoothing")
-        } footer: {
-            Text("Applied to every clean \u{2014} reduces the clicks and abrupt jumps at each cut.")
-                .font(.caption).foregroundStyle(.secondary)
+            SettingsSectionHeader("Cut smoothing",
+                help: "Applied to every clean \u{2014} reduces the clicks and abrupt jumps at each cut.")
         }
     }
 
@@ -174,10 +186,13 @@ struct SettingsView: View {
             Picker("Output format", selection: $settings.outputContainer) {
                 ForEach(OutputContainer.allCases) { Text($0.label).tag($0.rawValue) }
             }
-            Text(isWebM
-                 ? "WebM always uses VP9 video and Opus audio. It\u{2019}s the most web-friendly format, but slower to encode (no hardware VP9 encoder)."
-                 : "\u{201C}Same as input\u{201D} keeps each video\u{2019}s original container \u{2014} an .mkv stays .mkv, an .mp4 stays .mp4.")
-                .font(.caption).foregroundStyle(.secondary)
+            .help("\u{201C}Same as input\u{201D} keeps each video\u{2019}s original container \u{2014} .mkv stays .mkv, .mp4 stays .mp4.")
+            // Only WebM changes behavior (it forces its own codecs), so surface that tradeoff
+            // inline; every other format is self-evident from its label.
+            if isWebM {
+                Text("WebM always uses VP9 video and Opus audio \u{2014} web-friendly, but slower to encode (no hardware VP9 encoder).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
 
             // WebM dictates its own codecs, so these don't apply when it's chosen.
             Group {
@@ -185,8 +200,7 @@ struct SettingsView: View {
                     ForEach(VideoCodec.allCases) { Text($0.label).tag($0.rawValue) }
                 }
                 Toggle("Hardware acceleration", isOn: $settings.hardwareEncoding)
-                Text("Apple VideoToolbox \u{2014} faster, but software gives slightly better quality per file size.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .help("Apple VideoToolbox \u{2014} faster; software gives slightly better quality per file size.")
                 Picker("Audio format", selection: $settings.audioCodec) {
                     ForEach(AudioCodec.allCases) { Text($0.label).tag($0.rawValue) }
                 }
@@ -250,10 +264,8 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("Encoding")
-        } footer: {
-            Text("Applied to every clean. Cuts are always re-encoded, so these set the output quality.")
-                .font(.caption).foregroundStyle(.secondary)
+            SettingsSectionHeader("Encoding",
+                help: "Applied to every clean. Cuts are always re-encoded, so these set the output quality.")
         }
     }
 
@@ -267,21 +279,19 @@ struct SettingsView: View {
         Section {
             if let editor = EditorDetector.resolve() {
                 Toggle("Send my cuts to a video editor", isOn: $settings.exportToEditor)
-                Text("Crisp finds the cuts and hands them to your editor as a ready-to-edit timeline — no rendering, so it finishes in seconds. Constant-frame-rate footage is copied as-is; variable-frame-rate clips (some screen recordings) are conformed for sync. When it\u{2019}s done, Crisp asks which editor to open and you import the timeline there. Found \(editor.name) on your Mac.")
+                Text("Found \(editor.name) on your Mac.")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 // Bind to the real setting so a user who enabled this earlier can still
                 // turn it off here; only block enabling it when no editor is installed.
                 Toggle("Send my cuts to a video editor", isOn: $settings.exportToEditor)
                     .disabled(!settings.exportToEditor)
-                Text("We couldn\u{2019}t find a video editor on your Mac yet. Install DaVinci Resolve (the free version works great) and Crisp can send your cuts straight to it.")
+                Text("No video editor found yet \u{2014} install DaVinci Resolve (the free version works great) to use this.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         } header: {
-            Text("Send to a video editor")
-        } footer: {
-            Text("The fastest way out of Crisp \u{2014} skip rendering and finish in your editor. Turn this off to have Crisp render a polished video for you instead.")
-                .font(.caption).foregroundStyle(.secondary)
+            SettingsSectionHeader("Send to a video editor",
+                help: "The fastest way out of Crisp \u{2014} it hands your cuts to your editor as a ready-to-edit timeline, so there\u{2019}s no rendering and it finishes in seconds. Constant-frame-rate footage is copied as-is; variable-frame-rate clips (some screen recordings) are conformed for sync. When it\u{2019}s done Crisp asks which editor to open. Turn this off to have Crisp render a polished video for you instead.")
         }
     }
 
@@ -303,12 +313,8 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("Captions")
-        } footer: {
-            Text(settings.captionsFormat == "none"
-                 ? "Turn this on to also write a subtitle file (.srt or .vtt) next to each cleaned video \u{2014} ready for YouTube, Premiere, or the web. Captions are transcribed, so they need the speech model."
-                 : "Crisp writes the subtitles re-timed to the cut video, so they stay in sync after pauses and fillers are removed. Filler words are left out of the captions.")
-                .font(.caption).foregroundStyle(.secondary)
+            SettingsSectionHeader("Captions",
+                help: "Writes a subtitle file (.srt or .vtt) next to each cleaned video \u{2014} ready for YouTube, Premiere, or the web. Crisp re-times the subtitles to the cut video so they stay in sync after pauses and fillers are removed (filler words are left out). Captions are transcribed, so they need the speech model.")
         }
     }
 
@@ -334,17 +340,8 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("Output location")
-        } footer: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(settings.outputDirectory.isEmpty
-                     ? "Cleaned videos are saved next to the original \u{2014} the same folder you picked the video from."
-                     : "Cleaned videos are saved into this folder (e.g. a NAS). The original stays where it is.")
-                Text(settings.splitTracks
-                     ? "Alongside each cleaned file, Crisp also writes a video-only and an audio-only copy \u{2014} so you can animate the picture while keeping the cleaned voiceover."
-                     : "Turn on \u{201C}separate video & audio\u{201D} to also get the picture and sound as their own files for editing.")
-            }
-            .font(.caption).foregroundStyle(.secondary)
+            SettingsSectionHeader("Output location",
+                help: "Cleaned videos are saved next to the original, or into a folder you choose (e.g. a NAS) \u{2014} either way your original never moves. Turn on \u{201C}separate video & audio\u{201D} to also get a video-only and an audio-only copy beside each cleaned file, so you can animate the picture while keeping the cleaned voiceover.")
         }
     }
 
@@ -352,12 +349,8 @@ struct SettingsView: View {
         Section {
             Toggle("Keep a backup of the original", isOn: $settings.backupOriginal)
         } header: {
-            Text("Originals")
-        } footer: {
-            Text(settings.backupOriginal
-                 ? "Before each clean, your original is copied into a dated folder under \u{201C}Originals\u{201D} in Crisp\u{2019}s home folder. Crisp never edits or deletes your source file."
-                 : "Crisp won\u{2019}t copy your original. It still never edits or deletes your source file \u{2014} only a new cleaned copy is written.")
-                .font(.caption).foregroundStyle(.secondary)
+            SettingsSectionHeader("Originals",
+                help: "When on, your original is copied into a dated folder under \u{201C}Originals\u{201D} in Crisp\u{2019}s home folder before each clean. Either way, Crisp never edits or deletes your source file \u{2014} only a new cleaned copy is written.")
         }
     }
 
@@ -396,10 +389,8 @@ struct SettingsView: View {
                 ModelInstallControl(store: modelStore, allowRemove: true, removeDisabled: model.isRunning)
             }
         } header: {
-            Text("Speech model")
-        } footer: {
-            Text("Used to find filler words (and to write captions). Larger models catch more fillers and place cuts more precisely, but download and run slower. Pauses are detected from the audio either way.")
-                .font(.caption).foregroundStyle(.secondary)
+            SettingsSectionHeader("Speech model",
+                help: "Used to find filler words (and to write captions). Larger models catch more fillers and place cuts more precisely, but download and run slower. Pauses are detected from the audio either way.")
         }
     }
 
@@ -465,10 +456,8 @@ struct SettingsView: View {
                 if Channel.current.showsModelDevTools { devModelTools }
             }
         } header: {
-            Text("Filler detection (experimental)")
-        } footer: {
-            Text("A tiny on-device model that spots um/uh much faster than transcribing — used instead of the speech model above when removing fillers. English only; off by default. Captions and repeated-take removal still need the speech model.")
-                .font(.caption).foregroundStyle(.secondary)
+            SettingsSectionHeader("Filler detection (experimental)",
+                help: "A tiny on-device model that spots um/uh much faster than transcribing — used instead of the speech model above when removing fillers. English only; off by default. Captions and repeated-take removal still need the speech model.")
         }
         // Dev build: load the published version history so the picker can offer old models.
         .task(id: settings.fillerModelEnabled) {
@@ -590,9 +579,10 @@ struct SettingsView: View {
                 ForEach(memoryBudgets, id: \.self) { Text(gbLabel($0)).tag($0) }
             }
         } header: {
-            Text("Performance")
+            SettingsSectionHeader("Performance",
+                help: "Parallel cleaning is limited by the shared media engine and heat \u{2014} more at once isn\u{2019}t always faster.")
         } footer: {
-            Text("This Mac can clean about \(recommended) at once right now (up to \(ceiling) when memory is free). Parallel cleaning is limited by the shared media engine and heat \u{2014} more at once isn\u{2019}t always faster.")
+            Text("This Mac can clean about \(recommended) at once right now (up to \(ceiling) when memory is free).")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -644,10 +634,8 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("Presets")
-        } footer: {
-            Text("A preset saves the current cutting, encoding, output, and backup settings under a name. In the queue, pick a preset per file \u{2014} so different videos can be cleaned differently in one batch.")
-                .font(.caption).foregroundStyle(.secondary)
+            SettingsSectionHeader("Presets",
+                help: "A preset saves the current cutting, encoding, output, and backup settings under a name. In the queue, pick a preset per file \u{2014} so different videos can be cleaned differently in one batch.")
         }
     }
 
@@ -671,10 +659,8 @@ struct SettingsView: View {
         Section {
             Toggle("Show Crisp in the menu bar", isOn: $settings.menuBarEnabled)
         } header: {
-            Text("Menu Bar")
-        } footer: {
-            Text("Adds a menu-bar item with a drop zone \u{2014} drop a video to clean it with your default recipe without opening this window.")
-                .font(.caption).foregroundStyle(.secondary)
+            SettingsSectionHeader("Menu Bar",
+                help: "Adds a menu-bar item with a drop zone \u{2014} drop a video to clean it with your default recipe without opening this window.")
         }
     }
 
@@ -712,7 +698,8 @@ struct SettingsView: View {
             Toggle("Remove fillers", isOn: $settings.watchRemoveFillers)
                 .disabled(!settings.watchEnabled)
         } header: {
-            Text("Watch Folder")
+            SettingsSectionHeader("Watch Folder",
+                help: "Crisp watches this folder in the background \u{2014} even when this window is closed \u{2014} and cleans any recording dropped in. A cleaned copy is written beside each recording; your original is untouched.")
         } footer: {
             watchFooter.font(.caption).foregroundStyle(.secondary)
         }
@@ -822,10 +809,8 @@ struct SettingsView: View {
                     .controlSize(.small)
             }
         } header: {
-            Text("Diagnostics")
-        } footer: {
-            Text("Crisp keeps a daily log of each clean \u{2014} and anything that goes wrong \u{2014} in \(logsPathDisplay). If you hit a problem, share today\u{2019}s log.")
-                .font(.caption).foregroundStyle(.secondary)
+            SettingsSectionHeader("Diagnostics",
+                help: "Crisp keeps a daily log of each clean \u{2014} and anything that goes wrong \u{2014} in \(logsPathDisplay). If you hit a problem, share today\u{2019}s log.")
         }
     }
 

@@ -1,13 +1,8 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { motion, useScroll, useMotionValueEvent } from "framer-motion";
 import { Waveform } from "../components/Logo";
 import { Magnetic } from "../components/Motion";
-
-const LINKS = [
-  ["Overview", "#cut"],
-  ["Features", "#features"],
-  ["Privacy", "#privacy"],
-];
 
 export function Nav() {
   const { scrollY } = useScroll();
@@ -35,11 +30,24 @@ export function Nav() {
           Crisp
         </a>
         <div className="hidden items-center gap-8 text-[13px] text-white/60 sm:flex">
-          {LINKS.map(([label, href]) => (
-            <a key={href} href={href} className="transition-colors hover:text-white">
-              {label}
-            </a>
-          ))}
+          <a href="#cut" className="transition-colors hover:text-white">
+            Overview
+          </a>
+          <Link
+            to="/features"
+            className="text-[13px] text-white/60 transition-colors hover:text-white"
+          >
+            Features
+          </Link>
+          <Link
+            to="/pricing"
+            className="text-[13px] text-white/60 transition-colors hover:text-white"
+          >
+            Pricing
+          </Link>
+          <a href="#privacy" className="transition-colors hover:text-white">
+            Privacy
+          </a>
         </div>
         <Magnetic strength={0.5}>
           <a
